@@ -25,7 +25,7 @@ export default function OnlineScreen({ username, squad, onMatchComplete }: Props
 
   useEffect(() => {
     // Connect to the same host, port 3000
-    const newSocket = io(window.location.origin, {
+    const newSocket = io("https://tfco.onrender.com", {
       reconnectionAttempts: 5,
       timeout: 10000,
     });

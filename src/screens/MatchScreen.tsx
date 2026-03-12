@@ -136,6 +136,26 @@ export default function MatchScreen({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  useEffect(() => {
+    const preventDefault = (e: TouchEvent) => {
+      if (e.touches.length > 1) return; // Allow pinch zoom if needed, though touch-none usually blocks it
+      e.preventDefault();
+    };
+
+    const root = document.getElementById('match-screen-root');
+    if (root) {
+      root.addEventListener('touchmove', preventDefault, { passive: false });
+      root.addEventListener('touchstart', preventDefault, { passive: false });
+    }
+
+    return () => {
+      if (root) {
+        root.removeEventListener('touchmove', preventDefault);
+        root.removeEventListener('touchstart', preventDefault);
+      }
+    };
+  }, [matchStateUI]);
+
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
 
   const gameState = useRef({
@@ -1912,7 +1932,7 @@ export default function MatchScreen({
   };
 
   return (
-    <div className="h-full w-full bg-transparent flex flex-col overflow-hidden relative" id="match-screen-root">
+    <div className="h-full w-full bg-transparent flex flex-col overflow-hidden relative touch-none overscroll-none select-none" id="match-screen-root" style={{ touchAction: 'none' }}>
       {/* Orientation Hint */}
       {isMobile && orientation === 'portrait' && (
         <div className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center">

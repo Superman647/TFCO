@@ -3,11 +3,11 @@ import { Squad, Player, Difficulty } from '../types';
 import { generateRandomPlayer } from '../data/players';
 import { FORMATION_POSITIONS } from '../constants';
 import { useAudio } from '../contexts/AudioContext';
-import { Footprints, Target, Trophy, Timer } from 'lucide-react';
+import { Footprints, Target, Trophy, Timer, Play, Users } from 'lucide-react';
 
 interface Props {
   squad: Squad;
-  onFinish: (coins: number, xpGains: Record<string, number>, scoreA?: number, scoreB?: number) => void;
+  onFinish: (coins: number, xpGains: Record<string, number>, scoreA?: number, scoreB?: number, stats?: any) => void;
   opponentName?: string;
   opponentColor?: string;
   userTeamName?: string;
@@ -53,6 +53,8 @@ type Entity = {
   hasBall: boolean;
   isSentOff?: boolean;
   lastKickTime?: number;
+  health: number;
+  isInjured?: boolean;
 };
 
 type PenaltyState = {
@@ -98,6 +100,9 @@ export default function MatchScreen({
   const [introStage, setIntroStage] = useState<'walking' | 'anthem' | 'warmup'>('walking');
   const [introTimer, setIntroTimer] = useState(10);
   const [half, setHalf] = useState<1 | 2 | 3 | 4>(1); // 3=ET1, 4=ET2
+  const [isPaused, setIsPaused] = useState(false);
+  const [showSubMenu, setShowSubMenu] = useState(false);
+  const [selectedSubPlayer, setSelectedSubPlayer] = useState<Player | null>(null);
   const [logQueue, setLogQueue] = useState<string[]>([]);
   const [activeLog, setActiveLog] = useState<string | null>(null);
   const [penaltyState, setPenaltyState] = useState<PenaltyState>({
@@ -115,6 +120,21 @@ export default function MatchScreen({
   const keys = useRef<{ [key: string]: boolean }>({});
   const controlledPlayerId = useRef<string | null>(null);
   const mouseTarget = useRef<{x: number, y: number} | null>(null);
+  const touchStart = useRef<{ x: number, y: number, time: number } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape');
+  const [joystick, setJoystick] = useState<{ x: number, y: number, active: boolean }>({ x: 0, y: 0, active: false });
+  const joystickRef = useRef<{ startX: number, startY: number } | null>(null);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+      setOrientation(window.innerHeight > window.innerWidth ? 'portrait' : 'landscape');
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
 
@@ -218,10 +238,14 @@ export default function MatchScreen({
     return () => clearInterval(interval);
   }, [matchStateUI]);
 
+  const initializedHalfRef = useRef<number>(0);
+
   const resetPositions = useCallback((kickOffTeam: 'A' | 'B' = 'A') => {
       gameState.current.ball = { x: PITCH_W/2, y: PITCH_H/2, vx: 0, vy: 0 };
       gameState.current.kickOffTeam = kickOffTeam;
       gameState.current.kickOffInvincibility = 3000; // 3 seconds invincibility
+
+      const isSwapped = (half === 2 || half === 4) && mode !== 'TRAINING';
 
       gameState.current.players.forEach(p => {
         if (p.isSentOff) return;
@@ -230,14 +254,15 @@ export default function MatchScreen({
         
         // Adjust for kick-off
         if (p.team === kickOffTeam) {
-           // One player near ball
-           if (p.playerData.position === 'FW' || p.playerData.position === 'MF') {
-              const dist = Math.hypot(p.homeX - PITCH_W/2, p.homeY - PITCH_H/2);
-              if (dist < 100) {
-                 p.x = PITCH_W/2 + (p.team === 'A' ? -20 : 20);
-                 p.y = PITCH_H/2;
-              }
-           }
+            // One player near ball
+            if (p.playerData.position === 'FW' || p.playerData.position === 'MF') {
+               const dist = Math.hypot(p.homeX - PITCH_W/2, p.homeY - PITCH_H/2);
+               if (dist < 100) {
+                  const offset = isSwapped ? (p.team === 'A' ? 20 : -20) : (p.team === 'A' ? -20 : 20);
+                  p.x = PITCH_W/2 + offset;
+                  p.y = PITCH_H/2;
+               }
+            }
         }
 
         p.vx = 0;
@@ -247,7 +272,7 @@ export default function MatchScreen({
         p.hasBall = false;
       });
       mouseTarget.current = null;
-  }, []);
+  }, [half, mode]);
 
   useEffect(() => {
     if (matchStateUI === 'setup') return; 
@@ -280,7 +305,7 @@ export default function MatchScreen({
     }
 
     // Initialize players once or on half change
-    if (!initializedRef.current || half === 2) {
+    if (initializedHalfRef.current !== half) {
       const aiTeam = aiTeamRef.current;
       const aiFormation = '4-3-3';
       const aiPositions = FORMATION_POSITIONS[aiFormation];
@@ -290,6 +315,7 @@ export default function MatchScreen({
 
       const formA = FORMATION_POSITIONS[squad.formation] || FORMATION_POSITIONS['4-3-3'];
       const formB = aiPositions;
+      const isSwapped = (half === 2 || half === 4) && mode !== 'TRAINING';
 
       const initPlayers: Entity[] = [];
       
@@ -299,7 +325,8 @@ export default function MatchScreen({
         if (p) {
           initPlayers.push({
             id: `a_0`, x: 200, y: PITCH_H / 2, vx: 0, vy: 0, targetX: null, targetY: null,
-            color: userTeamColor || '#2563eb', playerData: p, team: 'A', homeX: 200, homeY: PITCH_H / 2, hasBall: true
+            color: userTeamColor || '#2563eb', playerData: p, team: 'A', homeX: 200, homeY: PITCH_H / 2, hasBall: true,
+            health: 100
           });
           gameState.current.ball.x = 200 + PLAYER_RADIUS + BALL_RADIUS;
           gameState.current.ball.y = PITCH_H / 2;
@@ -312,7 +339,8 @@ export default function MatchScreen({
           const y = PITCH_H / 2 + (i - 1) * 100;
           initPlayers.push({
             id: `a_${i}`, x, y, vx: 0, vy: 0, targetX: null, targetY: null,
-            color: userTeamColor || '#2563eb', playerData: p!, team: 'A', homeX: x, homeY: y, hasBall: i === 0
+            color: userTeamColor || '#2563eb', playerData: p!, team: 'A', homeX: x, homeY: y, hasBall: i === 0,
+            health: 100
           });
           if (i === 0) {
             gameState.current.ball.x = x + PLAYER_RADIUS + BALL_RADIUS;
@@ -322,9 +350,12 @@ export default function MatchScreen({
       } else {
         squad.lineup.slice(0, 11).forEach((p, i) => {
           if (!p || !formA[i]) return;
+          const baseX = formA[i].matchX;
+          const finalX = isSwapped ? (1 - baseX) : baseX;
           initPlayers.push({
-            id: `a_${i}`, x: formA[i].matchX * PITCH_W, y: formA[i].matchY * PITCH_H, vx: 0, vy: 0, targetX: null, targetY: null,
-            color: userTeamColor || '#2563eb', playerData: p, team: 'A', homeX: formA[i].matchX * PITCH_W, homeY: formA[i].matchY * PITCH_H, hasBall: false
+            id: `a_${i}`, x: finalX * PITCH_W, y: formA[i].matchY * PITCH_H, vx: 0, vy: 0, targetX: null, targetY: null,
+            color: userTeamColor || '#2563eb', playerData: p, team: 'A', homeX: finalX * PITCH_W, homeY: formA[i].matchY * PITCH_H, hasBall: false,
+            health: 100
           });
         });
       }
@@ -334,7 +365,8 @@ export default function MatchScreen({
         const gk = aiTeam.find(p => p.position === 'GK') || aiTeam[0];
         initPlayers.push({
           id: `b_gk`, x: PITCH_W - 20, y: PITCH_H / 2, vx: 0, vy: 0, targetX: null, targetY: null,
-          color: opponentColor || '#dc2626', playerData: gk, team: 'B', homeX: PITCH_W - 20, homeY: PITCH_H / 2, hasBall: false
+          color: opponentColor || '#dc2626', playerData: gk, team: 'B', homeX: PITCH_W - 20, homeY: PITCH_H / 2, hasBall: false,
+          health: 100
         });
       } else if (drillType === 'DRIBBLING') {
         aiTeam.slice(0, 6).forEach((p, i) => {
@@ -342,7 +374,8 @@ export default function MatchScreen({
           const y = PITCH_H * (0.2 + Math.random() * 0.6);
           initPlayers.push({
             id: `b_${i}`, x, y, vx: 0, vy: 0, targetX: null, targetY: null,
-            color: opponentColor || '#dc2626', playerData: p, team: 'B', homeX: x, homeY: y, hasBall: false
+            color: opponentColor || '#dc2626', playerData: p, team: 'B', homeX: x, homeY: y, hasBall: false,
+            health: 100
           });
         });
       } else if (drillType === 'PASSING') {
@@ -351,19 +384,24 @@ export default function MatchScreen({
           const y = PITCH_H * (0.3 + i * 0.2);
           initPlayers.push({
             id: `b_${i}`, x, y, vx: 0, vy: 0, targetX: null, targetY: null,
-            color: opponentColor || '#dc2626', playerData: p, team: 'B', homeX: x, homeY: y, hasBall: false
+            color: opponentColor || '#dc2626', playerData: p, team: 'B', homeX: x, homeY: y, hasBall: false,
+            health: 100
           });
         });
       } else {
         aiTeam.forEach((p, i) => {
+          const baseX = 1 - formB[i].matchX;
+          const finalX = isSwapped ? (1 - baseX) : baseX;
           initPlayers.push({
-            id: `b_${i}`, x: (1 - formB[i].matchX) * PITCH_W, y: formB[i].matchY * PITCH_H, vx: 0, vy: 0, targetX: null, targetY: null,
-            color: opponentColor || '#dc2626', playerData: p, team: 'B', homeX: (1 - formB[i].matchX) * PITCH_W, homeY: formB[i].matchY * PITCH_H, hasBall: false
+            id: `b_${i}`, x: finalX * PITCH_W, y: formB[i].matchY * PITCH_H, vx: 0, vy: 0, targetX: null, targetY: null,
+            color: opponentColor || '#dc2626', playerData: p, team: 'B', homeX: finalX * PITCH_W, homeY: formB[i].matchY * PITCH_H, hasBall: false,
+            health: 100
           });
         });
       }
 
       gameState.current.players = initPlayers;
+      initializedHalfRef.current = half;
       initializedRef.current = true;
       
       // Set initial controlled player
@@ -384,6 +422,10 @@ export default function MatchScreen({
         gameState.current.state = 'PLAYING';
         setMatchStateUI('playing');
       }
+
+      if (half > 1) {
+        resetPositions(half % 2 === 0 ? 'B' : 'A');
+      }
     }
 
     let animationFrameId: number;
@@ -396,6 +438,7 @@ export default function MatchScreen({
 
     const update = (dt: number) => {
       const state = gameState.current;
+      const isSwapped = (half === 2 || half === 4) && mode !== 'TRAINING';
 
       // Multiplayer Sync
       if (socket && matchId) {
@@ -676,21 +719,43 @@ export default function MatchScreen({
       if (ball.x < 0) {
         if (ball.y > GOAL_Y1 && ball.y < GOAL_Y2) {
           if (mode !== 'TRAINING') {
-            state.score.B++;
-            setScore({ ...state.score });
-            state.state = 'GOAL';
-            playSound('goal');
-            
-            // AI Scored
-            setMatchStats(prev => ({
-              ...prev,
-              goals: [...prev.goals, { playerId: 'ai', minute: Math.floor(state.timer), team: 'B' }]
-            }));
+            if (isSwapped) {
+              state.score.A++;
+              setScore({ ...state.score });
+              state.state = 'GOAL';
+              playSound('goal');
+              
+              const scorer = players.find(p => p.id === controlledPlayerId.current) || players.find(p => p.team === 'A');
+              if (scorer) {
+                 setMatchStats(prev => ({
+                    ...prev,
+                    goals: [...prev.goals, { playerId: scorer.playerData.id, minute: Math.floor(state.timer), team: 'A' }],
+                    ratings: { ...prev.ratings, [scorer.playerData.id]: (prev.ratings[scorer.playerData.id] || 6) + 1.5 }
+                 }));
+                 addLogEvent(`GOAL! ${scorer.playerData.name} scores!`);
+              }
 
-            setTimeout(() => { 
-               state.state = 'PLAYING'; 
-               resetPositions('A'); // User kicks off
-            }, 3000);
+              setTimeout(() => { 
+                 state.state = 'PLAYING'; 
+                 resetPositions('B'); // AI kicks off
+              }, 3000);
+            } else {
+              state.score.B++;
+              setScore({ ...state.score });
+              state.state = 'GOAL';
+              playSound('goal');
+              
+              // AI Scored
+              setMatchStats(prev => ({
+                ...prev,
+                goals: [...prev.goals, { playerId: 'ai', minute: Math.floor(state.timer), team: 'B' }]
+              }));
+
+              setTimeout(() => { 
+                 state.state = 'PLAYING'; 
+                 resetPositions('A'); // User kicks off
+              }, 3000);
+            }
           } else {
             ball.x = PITCH_W/2;
             ball.y = PITCH_H/2;
@@ -714,26 +779,44 @@ export default function MatchScreen({
           }
 
           if (mode !== 'TRAINING' || drillType === 'PASSING' || drillType === 'SHOOTING') {
-            state.score.A++;
-            setScore({ ...state.score });
-            state.state = 'GOAL';
-            playSound('goal');
-            
-            // Player Scored (Last touch)
-            const scorer = players.find(p => p.id === controlledPlayerId.current) || players.find(p => p.team === 'A');
-            if (scorer) {
-               setMatchStats(prev => ({
-                  ...prev,
-                  goals: [...prev.goals, { playerId: scorer.playerData.id, minute: Math.floor(state.timer), team: 'A' }],
-                  ratings: { ...prev.ratings, [scorer.playerData.id]: (prev.ratings[scorer.playerData.id] || 6) + 1.5 }
-               }));
-               addLogEvent(`GOAL! ${scorer.playerData.name} scores!`);
-            }
+            if (isSwapped) {
+              state.score.B++;
+              setScore({ ...state.score });
+              state.state = 'GOAL';
+              playSound('goal');
+              
+              // AI Scored
+              setMatchStats(prev => ({
+                ...prev,
+                goals: [...prev.goals, { playerId: 'ai', minute: Math.floor(state.timer), team: 'B' }]
+              }));
 
-            setTimeout(() => { 
-               state.state = 'PLAYING'; 
-               resetPositions('B'); // AI kicks off
-            }, 3000);
+              setTimeout(() => { 
+                 state.state = 'PLAYING'; 
+                 resetPositions('A'); // User kicks off
+              }, 3000);
+            } else {
+              state.score.A++;
+              setScore({ ...state.score });
+              state.state = 'GOAL';
+              playSound('goal');
+              
+              // Player Scored (Last touch)
+              const scorer = players.find(p => p.id === controlledPlayerId.current) || players.find(p => p.team === 'A');
+              if (scorer) {
+                 setMatchStats(prev => ({
+                    ...prev,
+                    goals: [...prev.goals, { playerId: scorer.playerData.id, minute: Math.floor(state.timer), team: 'A' }],
+                    ratings: { ...prev.ratings, [scorer.playerData.id]: (prev.ratings[scorer.playerData.id] || 6) + 1.5 }
+                 }));
+                 addLogEvent(`GOAL! ${scorer.playerData.name} scores!`);
+              }
+
+              setTimeout(() => { 
+                 state.state = 'PLAYING'; 
+                 resetPositions('B'); // AI kicks off
+              }, 3000);
+            }
           } else {
             ball.x = PITCH_W/2;
             ball.y = PITCH_H/2;
@@ -771,28 +854,51 @@ export default function MatchScreen({
         }
       }
 
-      // Proximity-based Fouls
+      // Proximity-based Fouls & Collisions
       const activePlayers = players.filter(p => !p.isSentOff);
-      if (mode !== 'TRAINING') {
-        for (let i = 0; i < activePlayers.length; i++) {
-          for (let j = i + 1; j < activePlayers.length; j++) {
-            const p1 = activePlayers[i];
-            const p2 = activePlayers[j];
+      for (let i = 0; i < activePlayers.length; i++) {
+        for (let j = i + 1; j < activePlayers.length; j++) {
+          const p1 = activePlayers[i];
+          const p2 = activePlayers[j];
+          const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+          
+          if (dist < PLAYER_RADIUS * 2) {
+            const angle = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+            const overlap = PLAYER_RADIUS * 2 - dist;
+            p1.x += Math.cos(angle) * overlap / 2;
+            p1.y += Math.sin(angle) * overlap / 2;
+            p2.x -= Math.cos(angle) * overlap / 2;
+            p2.y -= Math.sin(angle) * overlap / 2;
             
-            if (p1.team !== p2.team) {
-              const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-              // Only foul if extremely close and one has the ball or is tackling
-              if (dist < PLAYER_RADIUS * 1.5) {
-                // Low random chance when very close
-                if (Math.random() < 0.0005) {
-                  const foulBy = Math.random() < 0.5 ? p1 : p2;
-                  const victim = foulBy === p1 ? p2 : p1;
-                  
-                  const isPenalty = (foulBy.team === 'A' && victim.x < 150 && victim.y > PITCH_H/2 - 120 && victim.y < PITCH_H/2 + 120) ||
-                                    (foulBy.team === 'B' && victim.x > PITCH_W - 150 && victim.y > PITCH_H/2 - 120 && victim.y < PITCH_H/2 + 120);
+            // Collision damage
+            const impact = Math.hypot(p1.vx - p2.vx, p1.vy - p2.vy);
+            if (impact > 3) {
+              p1.health -= impact * 0.05;
+              p2.health -= impact * 0.05;
+              if (Math.random() < 0.002 && impact > 5) {
+                const victim = Math.random() > 0.5 ? p1 : p2;
+                if (!victim.isInjured) {
+                  victim.isInjured = true;
+                  addLogEvent(`${victim.playerData.name} is injured!`);
+                }
+              }
+            }
+          }
 
-                  const card = Math.random() < 0.85 ? 'YELLOW' : 'RED';
-                  addLogEvent(`${foulBy.playerData.name} committed a foul on ${victim.playerData.name}. ${card} CARD!`);
+          if (mode !== 'TRAINING' && p1.team !== p2.team) {
+            if (dist < PLAYER_RADIUS * 1.5) {
+              if (Math.random() < 0.0005) {
+                const foulBy = Math.random() < 0.5 ? p1 : p2;
+                const victim = foulBy === p1 ? p2 : p1;
+                
+                const teamADefenseX = isSwapped ? PITCH_W - 150 : 150;
+                const teamBDefenseX = isSwapped ? 150 : PITCH_W - 150;
+                
+                const isPenalty = (foulBy.team === 'A' && (isSwapped ? victim.x > teamADefenseX : victim.x < teamADefenseX) && victim.y > PITCH_H/2 - 120 && victim.y < PITCH_H/2 + 120) ||
+                                  (foulBy.team === 'B' && (isSwapped ? victim.x < teamBDefenseX : victim.x > teamBDefenseX) && victim.y > PITCH_H/2 - 120 && victim.y < PITCH_H/2 + 120);
+
+                const card = Math.random() < 0.85 ? 'YELLOW' : 'RED';
+                addLogEvent(`${foulBy.playerData.name} committed a foul on ${victim.playerData.name}. ${card} CARD!`);
                   
                   if (card === 'RED') {
                     foulBy.isSentOff = true;
@@ -837,7 +943,6 @@ export default function MatchScreen({
             }
           }
         }
-      }
 
       players.forEach(p => {
         if (p.isSentOff) return;
@@ -922,13 +1027,15 @@ export default function MatchScreen({
               aimAngle = Math.atan2(mouseTarget.current.y - p.y, mouseTarget.current.x - p.x);
             } else if (isShootPressed) {
               // Default shoot aim is always towards the goal
-              aimAngle = Math.atan2(PITCH_H/2 - p.y, PITCH_W - p.x);
+              const goalX = isSwapped ? 0 : PITCH_W;
+              aimAngle = Math.atan2(PITCH_H/2 - p.y, goalX - p.x);
             } else if (Math.abs(p.vx) > 0.1 || Math.abs(p.vy) > 0.1) {
               // Aim in movement direction
               aimAngle = Math.atan2(p.vy, p.vx);
             } else {
               // Default to goal direction
-              aimAngle = Math.atan2(PITCH_H/2 - p.y, PITCH_W - p.x);
+              const goalX = isSwapped ? 0 : PITCH_W;
+              aimAngle = Math.atan2(PITCH_H/2 - p.y, goalX - p.x);
             }
 
             // Only look for pass candidate if Pass key is pressed
@@ -970,7 +1077,8 @@ export default function MatchScreen({
               mouseTarget.current = null;
             } else {
               const shootPower = p.playerData.stats.sho * 0.32;
-              const angle = Math.atan2(PITCH_H/2 - p.y, PITCH_W - p.x);
+              const goalX = isSwapped ? 0 : PITCH_W;
+              const angle = Math.atan2(PITCH_H/2 - p.y, goalX - p.x);
               const shoStat = p.playerData.stats.sho;
               const errorFactor = (100 - shoStat) * 0.005;
               const angleError = (Math.random() - 0.5) * errorFactor;
@@ -1007,8 +1115,9 @@ export default function MatchScreen({
                 if (distToBall < tackleRadius) {
                   if (!(state.kickOffInvincibility > 0 && p.team !== state.kickOffTeam)) {
                      p.lastKickTime = now;
-                     const clearDir = p.team === 'A' ? 1 : -1;
-                     ball.vx = (Math.random() * 5 + 7) * clearDir; 
+                    const isSwapped = (half === 2 || half === 4) && mode !== 'TRAINING';
+                    const clearDir = p.team === 'A' ? (isSwapped ? -1 : 1) : (isSwapped ? 1 : -1);
+                    ball.vx = (Math.random() * 5 + 7) * clearDir; 
                      ball.vy = (Math.random() - 0.5) * 12;
                      playSound('kick');
                      addLogEvent(`${p.playerData.name} tackles!`);
@@ -1032,7 +1141,8 @@ export default function MatchScreen({
                    // AI respects kick-off rules
                 } else {
                    // AI Tackle
-                   const clearDir = -1;
+                   const isSwapped = (half === 2 || half === 4) && mode !== 'TRAINING';
+                   const clearDir = isSwapped ? 1 : -1;
                    ball.vx += (Math.random() * 5 + 5) * clearDir;
                    ball.vy += (Math.random() - 0.5) * 10;
                    playSound('kick');
@@ -1041,36 +1151,66 @@ export default function MatchScreen({
           }
 
           if (p.hasBall) {
-            const goalX = p.team === 'A' ? PITCH_W : 0;
+            const goalX = p.team === 'A' ? (isSwapped ? 0 : PITCH_W) : (isSwapped ? PITCH_W : 0);
             const goalY = PITCH_H / 2;
             const distToGoal = Math.hypot(goalX - p.x, goalY - p.y);
             
+            // AI Tactical Thinking: Look for pass before shooting or dribbling
+            const teammates = players.filter(t => t.team === p.team && t.id !== p.id && !t.isSentOff);
+            let bestPassOption = null;
+            let bestPassScore = -Infinity;
+
+            teammates.forEach(t => {
+              const distToT = Math.hypot(t.x - p.x, t.y - p.y);
+              const tDistToGoal = Math.hypot(goalX - t.x, goalY - t.y);
+              
+              // Score based on being closer to goal and clear path
+              if (tDistToGoal < distToGoal - 50 && distToT < 300) {
+                const score = (distToGoal - tDistToGoal) * 2 - distToT * 0.1;
+                if (score > bestPassScore) {
+                  bestPassScore = score;
+                  bestPassOption = t;
+                }
+              }
+            });
+
             // AI Clearance Logic: If in danger zone, clear the ball immediately
-            const isDangerZone = p.team === 'A' ? p.x < 150 : p.x > PITCH_W - 150;
+            const isDangerZone = p.team === 'A' ? (isSwapped ? p.x > PITCH_W - 150 : p.x < 150) : (isSwapped ? p.x < 150 : p.x > PITCH_W - 150);
             
             if (isDangerZone) {
                playSound('kick');
-               // Clear towards opponent side with slight random angle
-               const clearAngle = p.team === 'A' ? (Math.random() * 0.6 - 0.3) : (Math.PI + Math.random() * 0.6 - 0.3);
+               const clearAngle = p.team === 'A' ? (isSwapped ? (Math.PI + Math.random() * 0.6 - 0.3) : (Math.random() * 0.6 - 0.3)) : (isSwapped ? (Math.random() * 0.6 - 0.3) : (Math.PI + Math.random() * 0.6 - 0.3));
                const clearPower = 12;
                ball.vx = Math.cos(clearAngle) * clearPower;
                ball.vy = Math.sin(clearAngle) * clearPower;
                p.hasBall = false;
                addLogEvent(`${p.playerData.name} clears!`);
-            } else if (distToGoal < 200) {
+            } else if (bestPassOption && Math.random() < 0.6) {
+              // AI Passes
               playSound('kick');
-              const shootPower = p.playerData.stats.sho * 0.15; // weaker
-              const inaccuracy = (100 - p.playerData.stats.sho) * 0.02;
+              const t = bestPassOption as Entity;
+              const angle = Math.atan2(t.y - p.y, t.x - p.x);
+              const power = Math.min(12, Math.hypot(t.x - p.x, t.y - p.y) * 0.05 + 4);
+              ball.vx = Math.cos(angle) * power;
+              ball.vy = Math.sin(angle) * power;
+              p.hasBall = false;
+              addLogEvent(`${p.playerData.name} passes to ${t.playerData.name}`);
+            } else if (distToGoal < 250) {
+              playSound('kick');
+              const shootPower = p.playerData.stats.sho * 0.25; 
+              const inaccuracy = (100 - p.playerData.stats.sho) * 0.01;
               const angle = Math.atan2(goalY - p.y + (Math.random()-0.5)*inaccuracy*100, goalX - p.x);
               ball.vx = Math.cos(angle) * shootPower;
               ball.vy = Math.sin(angle) * shootPower;
               p.hasBall = false;
+              addLogEvent(`${p.playerData.name} shoots!`);
             } else {
-              // Move towards goal slower
+              // Dribble towards goal
               targetX = goalX;
               targetY = goalY;
-              ball.x = p.x + Math.cos(Math.atan2(goalY - p.y, goalX - p.x)) * (PLAYER_RADIUS + BALL_RADIUS);
-              ball.y = p.y + Math.sin(Math.atan2(goalY - p.y, goalX - p.x)) * (PLAYER_RADIUS + BALL_RADIUS);
+              const angle = Math.atan2(goalY - p.y, goalX - p.x);
+              ball.x = p.x + Math.cos(angle) * (PLAYER_RADIUS + BALL_RADIUS);
+              ball.y = p.y + Math.sin(angle) * (PLAYER_RADIUS + BALL_RADIUS);
               ball.vx = p.vx;
               ball.vy = p.vy;
             }
@@ -1474,7 +1614,8 @@ export default function MatchScreen({
               const distToBall = Math.hypot(state.ball.x - p.x, state.ball.y - p.y);
               const tackleRadius = p.playerData.stats.def * 0.5 + p.playerData.stats.phy * 0.3 + 15;
               if (distToBall < tackleRadius) {
-                 const clearDir = p.team === 'A' ? 1 : -1;
+                 const isSwapped = (half === 2 || half === 4) && mode !== 'TRAINING';
+                 const clearDir = p.team === 'A' ? (isSwapped ? -1 : 1) : (isSwapped ? 1 : -1);
                  state.ball.vx = (Math.random() * 8 + 8) * clearDir; 
                  state.ball.vy = (Math.random() - 0.5) * 12;
                  playSound('kick');
@@ -1549,6 +1690,7 @@ export default function MatchScreen({
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isMobile) return; // Use touch handlers for mobile
     if (gameState.current.state === 'PENALTIES') {
        handlePenaltyClick(e);
        return;
@@ -1564,6 +1706,130 @@ export default function MatchScreen({
 
       mouseTarget.current = { x: clickX, y: clickY };
     }
+  };
+
+  const handleJoystickStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    joystickRef.current = { startX: touch.clientX, startY: touch.clientY };
+    setJoystick({ x: 0, y: 0, active: true });
+  };
+
+  const handleJoystickMove = (e: React.TouchEvent) => {
+    if (!joystickRef.current) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - joystickRef.current.startX;
+    const dy = touch.clientY - joystickRef.current.startY;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = 40;
+    const ratio = Math.min(dist, maxDist) / maxDist;
+    const angle = Math.atan2(dy, dx);
+    
+    const jx = Math.cos(angle) * ratio * maxDist;
+    const jy = Math.sin(angle) * ratio * maxDist;
+    
+    setJoystick({ x: jx, y: jy, active: true });
+    
+    // Update player movement
+    const p = gameState.current.players.find(pl => pl.id === controlledPlayerId.current);
+    if (p) {
+      mouseTarget.current = { x: p.x + jx * 5, y: p.y + jy * 5 };
+    }
+  };
+
+  const handleJoystickEnd = () => {
+    joystickRef.current = null;
+    setJoystick({ x: 0, y: 0, active: false });
+    mouseTarget.current = null;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touch = e.touches[0];
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const scaleX = PITCH_W / rect.width;
+      const scaleY = PITCH_H / rect.height;
+      const x = (touch.clientX - rect.left) * scaleX;
+      const y = (touch.clientY - rect.top) * scaleY;
+      touchStart.current = { x, y, time: Date.now() };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!touchStart.current) return;
+    const touch = e.changedTouches[0];
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const scaleX = PITCH_W / rect.width;
+    const scaleY = PITCH_H / rect.height;
+    const endX = (touch.clientX - rect.left) * scaleX;
+    const endY = (touch.clientY - rect.top) * scaleY;
+
+    const dx = endX - touchStart.current.x;
+    const dy = endY - touchStart.current.y;
+    const dist = Math.hypot(dx, dy);
+    const duration = Date.now() - touchStart.current.time;
+
+    if (gameState.current.state === 'PENALTIES') {
+       // Handle penalty shootout touch
+       if (gameState.current.penaltyState.phase === 'aiming' || gameState.current.penaltyState.phase === 'saving') {
+          if (gameState.current.penaltyState.turn === 'A' && gameState.current.penaltyState.phase === 'aiming') {
+             gameState.current.penaltyState.shotTarget = { x: PITCH_W, y: endY };
+             gameState.current.penaltyState.phase = 'shooting';
+             gameState.current.penaltyState.timer = 0;
+             setPenaltyState({ ...gameState.current.penaltyState });
+          } else if (gameState.current.penaltyState.turn === 'B' && gameState.current.penaltyState.phase === 'saving') {
+             const diveY = endY;
+             gameState.current.penaltyState.keeperDive = { x: 20, y: diveY };
+             gameState.current.penaltyState.phase = 'saving';
+             gameState.current.penaltyState.timer = 0;
+             setPenaltyState({ ...gameState.current.penaltyState });
+          }
+       }
+       touchStart.current = null;
+       return;
+    }
+
+    if (dist < 20 && duration < 300) {
+      // Tap: Move to location
+      mouseTarget.current = { x: endX, y: endY };
+    } else if (dist > 30) {
+      // Swipe: Pass or Shoot
+      // Set mouse target to swipe end for aiming
+      mouseTarget.current = { x: endX, y: endY };
+      
+      // Determine if it's a pass or shoot
+      // Check if swipe ends near a teammate
+      const players = gameState.current.players;
+      const controlledId = controlledPlayerId.current;
+      const p = players.find(pl => pl.id === controlledId);
+      
+      if (p && p.team === 'A') {
+        const teammates = players.filter(t => t.team === 'A' && t.id !== p.id && !t.isSentOff);
+        let passTarget = null;
+        let minTeammateDist = 60; // Threshold for "swiping into teammate"
+
+        teammates.forEach(t => {
+          const d = Math.hypot(t.x - endX, t.y - endY);
+          if (d < minTeammateDist) {
+            minTeammateDist = d;
+            passTarget = t;
+          }
+        });
+
+        if (passTarget) {
+          // Trigger Pass
+          keys.current['KeyC'] = true;
+          setTimeout(() => { keys.current['KeyC'] = false; }, 100);
+        } else {
+          // Trigger Shoot
+          keys.current['KeyS'] = true;
+          setTimeout(() => { keys.current['KeyS'] = false; }, 100);
+        }
+      }
+    }
+
+    touchStart.current = null;
   };
 
   const handlePenaltyClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1631,11 +1897,37 @@ export default function MatchScreen({
     const finalScoreA = mode === 'PENALTY_SHOOTOUT' ? penaltyState.scoreA : score.A;
     const finalScoreB = mode === 'PENALTY_SHOOTOUT' ? penaltyState.scoreB : score.B;
 
-    onFinish(finalScoreA > finalScoreB ? 500 : finalScoreA === finalScoreB ? 200 : 100, xpGains, finalScoreA, finalScoreB);
+    onFinish(
+      finalScoreA > finalScoreB ? 500 : finalScoreA === finalScoreB ? 200 : 100, 
+      xpGains, 
+      finalScoreA, 
+      finalScoreB,
+      {
+        score: `${finalScoreA}-${finalScoreB}`,
+        opponent: opponentName || 'Opponent',
+        isWinner: finalScoreA > finalScoreB,
+        competition: isWorldCup ? 'World Cup' : 'League Match'
+      }
+    );
   };
 
   return (
     <div className="h-full w-full bg-transparent flex flex-col overflow-hidden relative" id="match-screen-root">
+      {/* Orientation Hint */}
+      {isMobile && orientation === 'portrait' && (
+        <div className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center">
+          <div className="w-24 h-24 mb-8 text-emerald-500 animate-bounce">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+              <path d="M12 18h.01" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-black italic text-white mb-4 tracking-tighter uppercase">Rotate Device</h2>
+          <p className="text-zinc-400 font-bold uppercase tracking-widest text-xs leading-relaxed">
+            Please rotate your device to landscape mode for the best football experience.
+          </p>
+        </div>
+      )}
       {/* Setup Overlay */}
       {matchStateUI === 'setup' && (
          <div className="absolute inset-0 z-[100] bg-zinc-950/80 backdrop-blur-md flex flex-col items-center justify-center p-8">
@@ -1678,35 +1970,35 @@ export default function MatchScreen({
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 relative">
         {/* Scoreboard */}
         {mode !== 'TRAINING' && (
-          <div className="w-full max-w-5xl flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-t-3xl p-6 shadow-2xl z-10">
-            <div className="flex items-center space-x-6">
+          <div className="w-full max-w-5xl flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-t-3xl p-3 md:p-6 shadow-2xl z-10">
+            <div className="flex items-center space-x-2 md:space-x-6">
               <div className="flex flex-col items-center">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transform -rotate-3 overflow-hidden bg-blue-600`}>
+                <div className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transform -rotate-3 overflow-hidden bg-blue-600`}>
                    {userTeamName ? userTeamName.substring(0, 3).toUpperCase() : 'YOU'}
                 </div>
-                <span className="text-xs font-bold text-blue-400 mt-2 uppercase tracking-widest">{userTeamName || 'Home'}</span>
+                <span className="text-[8px] md:text-xs font-bold text-blue-400 mt-1 md:mt-2 uppercase tracking-widest">{userTeamName || 'Home'}</span>
               </div>
-              <span className="text-6xl font-black italic tracking-tighter">{score.A}</span>
+              <span className="text-3xl md:text-6xl font-black italic tracking-tighter">{score.A}</span>
             </div>
             
-            <div className="flex flex-col items-center px-8 border-x border-zinc-800">
-              <span className="text-zinc-500 font-black text-xs uppercase tracking-[0.3em] mb-1">Match Time</span>
+            <div className="flex flex-col items-center px-4 md:px-8 border-x border-zinc-800">
+              <span className="text-zinc-500 font-black text-[8px] md:text-xs uppercase tracking-[0.3em] mb-1">Time</span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-5xl font-mono font-black text-emerald-400 tabular-nums">{timeLeft}</span>
-                <span className="text-2xl font-mono font-bold text-emerald-600">'</span>
+                <span className="text-2xl md:text-5xl font-mono font-black text-emerald-400 tabular-nums">{timeLeft}</span>
+                <span className="text-lg md:text-2xl font-mono font-bold text-emerald-600">'</span>
               </div>
-              <div className="mt-2 px-3 py-0.5 bg-zinc-800 rounded-full text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                {half === 1 ? '1st Half' : '2nd Half'}
+              <div className="mt-1 md:mt-2 px-2 md:px-3 py-0.5 bg-zinc-800 rounded-full text-[8px] md:text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                {half === 1 ? '1st' : '2nd'}
               </div>
             </div>
 
-            <div className="flex items-center space-x-6">
-              <span className="text-6xl font-black italic tracking-tighter">{score.B}</span>
+            <div className="flex items-center space-x-2 md:space-x-6">
+              <span className="text-3xl md:text-6xl font-black italic tracking-tighter">{score.B}</span>
               <div className="flex flex-col items-center">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl shadow-[0_0_20px_rgba(220,38,38,0.4)] transform rotate-3 overflow-hidden bg-red-600`}>
+                <div className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-2xl shadow-[0_0_20px_rgba(220,38,38,0.4)] transform rotate-3 overflow-hidden bg-red-600`}>
                    {opponentName ? opponentName.substring(0, 3).toUpperCase() : 'AI'}
                 </div>
-                <span className="text-xs font-bold text-red-400 mt-2 uppercase tracking-widest">{opponentName || 'Away'}</span>
+                <span className="text-[8px] md:text-xs font-bold text-red-400 mt-1 md:mt-2 uppercase tracking-widest">{opponentName || 'Away'}</span>
               </div>
             </div>
           </div>
@@ -1743,30 +2035,216 @@ export default function MatchScreen({
           </div>
         )}
 
+        {/* Mobile Controls Overlay */}
+        {isMobile && matchStateUI === 'playing' && (
+          <div className="absolute inset-0 pointer-events-none z-30">
+            {/* Joystick */}
+            <div 
+              className="absolute bottom-12 left-12 w-32 h-32 bg-white/5 rounded-full border border-white/10 backdrop-blur-md pointer-events-auto flex items-center justify-center"
+              onTouchStart={handleJoystickStart}
+              onTouchMove={handleJoystickMove}
+              onTouchEnd={handleJoystickEnd}
+            >
+              <div 
+                className="w-12 h-12 bg-emerald-500 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.5)] transition-transform duration-75"
+                style={{ transform: `translate(${joystick.x}px, ${joystick.y}px)` }}
+              />
+            </div>
+            
+            {/* Action Buttons (Optional but helpful for clarity) */}
+            <div className="absolute bottom-12 right-12 flex flex-col gap-4 pointer-events-auto">
+               <div className="flex gap-4">
+                  <div className="w-16 h-16 bg-blue-600/80 rounded-full flex items-center justify-center text-white font-black text-xs border border-blue-400/50 backdrop-blur-md shadow-xl active:scale-90 transition-transform"
+                       onTouchStart={() => { keys.current['KeyS'] = true; }}
+                       onTouchEnd={() => { keys.current['KeyS'] = false; }}>
+                     SHOOT
+                  </div>
+                  <div className="w-16 h-16 bg-amber-600/80 rounded-full flex items-center justify-center text-white font-black text-xs border border-amber-400/50 backdrop-blur-md shadow-xl active:scale-90 transition-transform"
+                       onTouchStart={() => { keys.current['KeyC'] = true; }}
+                       onTouchEnd={() => { keys.current['KeyC'] = false; }}>
+                     PASS
+                  </div>
+               </div>
+               <div className="flex justify-end">
+                  <div className="w-14 h-14 bg-rose-600/80 rounded-full flex items-center justify-center text-white font-black text-[10px] border border-rose-400/50 backdrop-blur-md shadow-xl active:scale-90 transition-transform"
+                       onTouchStart={() => { keys.current['ShiftLeft'] = true; }}
+                       onTouchEnd={() => { keys.current['ShiftLeft'] = false; }}>
+                     SPRINT
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
+
         {/* Pitch Container */}
-        <div className="w-full max-w-5xl aspect-[10/6] bg-zinc-900 border-x border-b border-zinc-800 rounded-b-3xl overflow-hidden relative shadow-[0_30px_60px_rgba(0,0,0,0.5)]">
+        <div className="w-full max-w-5xl aspect-[10/6] bg-zinc-900 border-x border-b border-zinc-800 rounded-b-xl md:rounded-b-3xl overflow-hidden relative shadow-[0_30px_60px_rgba(0,0,0,0.5)]">
           <canvas 
             ref={canvasRef}
             width={PITCH_W}
             height={PITCH_H}
             onClick={handleCanvasClick}
-            className="w-full h-full object-contain cursor-crosshair bg-[#14532d]"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="w-full h-full object-contain cursor-crosshair bg-[#14532d] touch-none"
           />
+          
+          {/* Pause Button */}
+          <button 
+            onClick={() => setIsPaused(!isPaused)}
+            className="absolute top-4 right-4 p-3 bg-black/50 backdrop-blur-md rounded-full border border-white/10 text-white hover:bg-black/70 transition-all z-20"
+          >
+            {isPaused ? <Play className="w-5 h-5 fill-current" /> : <Timer className="w-5 h-5" />}
+          </button>
+
+          {/* Substitution Button */}
+          <button 
+            onClick={() => { setIsPaused(true); setShowSubMenu(true); }}
+            className="absolute top-4 right-20 p-3 bg-emerald-600/80 backdrop-blur-md rounded-full border border-emerald-400/30 text-white hover:bg-emerald-500 transition-all z-20"
+          >
+            <Users className="w-5 h-5" />
+          </button>
+
+          {/* Pause Overlay */}
+          {isPaused && !showSubMenu && (
+            <div className="absolute inset-0 z-30 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center">
+              <h2 className="text-6xl font-black italic text-white mb-8">PAUSED</h2>
+              <button 
+                onClick={() => setIsPaused(false)}
+                className="px-12 py-4 bg-emerald-600 text-white font-black rounded-full hover:bg-emerald-500 transition-all text-xl"
+              >
+                RESUME MATCH
+              </button>
+            </div>
+          )}
+
+          {/* Substitution Menu */}
+          {showSubMenu && (
+            <div className="absolute inset-0 z-40 bg-zinc-950/90 backdrop-blur-md p-8 flex flex-col">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-black italic text-white">SUBSTITUTIONS</h2>
+                <button onClick={() => { setShowSubMenu(false); setIsPaused(false); }} className="text-zinc-500 hover:text-white">Close</button>
+              </div>
+              <div className="grid grid-cols-2 gap-8 flex-1 overflow-hidden">
+                <div className="space-y-4 overflow-y-auto pr-2">
+                  <h3 className="text-zinc-500 font-bold uppercase text-xs tracking-widest">On Pitch</h3>
+                  {gameState.current.players.filter(p => p.team === 'A').map(p => (
+                    <button 
+                      key={p.id}
+                      onClick={() => setSelectedSubPlayer(p.playerData)}
+                      className={`w-full p-4 rounded-xl border flex items-center justify-between transition-all ${
+                        selectedSubPlayer?.id === p.playerData.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold ${p.isInjured ? 'bg-red-500' : 'bg-zinc-800'}`}>
+                          {p.playerData.ovr}
+                        </div>
+                        <div className="text-left">
+                          <p className="font-bold text-sm">{p.playerData.name}</p>
+                          <p className={`text-[10px] ${p.isInjured ? 'text-red-400' : 'text-zinc-500'}`}>
+                            {p.isInjured ? 'INJURED' : `HP: ${Math.floor(p.health)}%`}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-mono text-zinc-600">{p.playerData.position}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-4 overflow-y-auto pr-2">
+                  <h3 className="text-zinc-500 font-bold uppercase text-xs tracking-widest">Bench</h3>
+                  {squad.lineup.filter(p => p && !gameState.current.players.some(op => op.playerData.id === p.id)).map(p => p && (
+                    <button 
+                      key={p.id}
+                      onClick={() => {
+                        if (selectedSubPlayer) {
+                          // Perform substitution
+                          const state = gameState.current;
+                          const idx = state.players.findIndex(op => op.playerData.id === selectedSubPlayer.id);
+                          if (idx !== -1) {
+                            const oldPlayer = state.players[idx];
+                            state.players[idx] = {
+                              ...oldPlayer,
+                              playerData: p,
+                              health: 100,
+                              isInjured: false
+                            };
+                            addLogEvent(`SUB: ${p.name} replaces ${selectedSubPlayer.name}`);
+                            setSelectedSubPlayer(null);
+                            setShowSubMenu(false);
+                            setIsPaused(false);
+                          }
+                        }
+                      }}
+                      className="w-full p-4 rounded-xl border border-zinc-800 bg-zinc-900 hover:border-emerald-500/50 flex items-center justify-between transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center font-bold">
+                          {p.ovr}
+                        </div>
+                        <div className="text-left">
+                          <p className="font-bold text-sm">{p.name}</p>
+                          <p className="text-[10px] text-zinc-500">READY</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-mono text-zinc-600">{p.position}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* World Cup Victory Celebration */}
+          {matchStateUI === 'finished' && isWorldCup && score.A > score.B && (
+            <div className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-lg flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-1000">
+              <div className="relative mb-8">
+                <Trophy className="w-48 h-48 text-yellow-400 animate-bounce drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]" />
+                <div className="absolute inset-0 bg-yellow-400 blur-3xl opacity-20 animate-pulse" />
+              </div>
+              <h2 className="text-7xl font-black italic text-white mb-4 tracking-tighter">WORLD CHAMPIONS!</h2>
+              <p className="text-2xl text-yellow-400 font-bold mb-12 uppercase tracking-[0.2em]">The world is at your feet</p>
+              <button 
+                onClick={handleFinish}
+                className="px-12 py-4 bg-white text-black font-black rounded-full hover:bg-yellow-400 hover:scale-110 transition-all text-xl shadow-2xl"
+              >
+                CLAIM THE TROPHY
+              </button>
+            </div>
+          )}
           
           {/* Controls Hint */}
           {matchStateUI === 'playing' && (
             <div className="absolute bottom-6 left-6 bg-black/70 backdrop-blur-xl p-5 rounded-2xl text-white text-xs font-bold border border-white/10 shadow-2xl pointer-events-none space-y-2">
-              <div className="flex items-center space-x-3">
-                <span className="px-2 py-1 bg-zinc-800 rounded border border-zinc-600 text-[10px]">S</span>
-                <span className="text-zinc-400">SHOOT</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <span className="px-2 py-1 bg-zinc-800 rounded border border-zinc-600 text-[10px]">C</span>
-                <span className="text-zinc-400">PASS / TACKLE</span>
-              </div>
-              <div className="pt-2 border-t border-white/5 text-[10px] text-zinc-500 italic">
-                Click pitch to move player
-              </div>
+              {isMobile ? (
+                <>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-6 border-2 border-white/30 rounded-full flex items-center justify-center">
+                      <div className="w-1 h-1 bg-white rounded-full" />
+                    </div>
+                    <span className="text-zinc-400">TAP TO MOVE</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-6 h-2 bg-white/30 rounded-full relative">
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-emerald-400 rounded-full" />
+                    </div>
+                    <span className="text-zinc-400">SWIPE TO PASS/SHOOT</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center space-x-3">
+                    <span className="px-2 py-1 bg-zinc-800 rounded border border-zinc-600 text-[10px]">S</span>
+                    <span className="text-zinc-400">SHOOT</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className="px-2 py-1 bg-zinc-800 rounded border border-zinc-600 text-[10px]">C</span>
+                    <span className="text-zinc-400">PASS / TACKLE</span>
+                  </div>
+                  <div className="pt-2 border-t border-white/5 text-[10px] text-zinc-500 italic">
+                    Click pitch to move player
+                  </div>
+                </>
+              )}
             </div>
           )}
 

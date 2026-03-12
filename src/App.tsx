@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, ShoppingBag, Users, Play, Trophy, Zap, LogOut, Globe, Dumbbell, Volume2, VolumeX, Target } from 'lucide-react';
-import { Player, Squad } from './types';
+import { Home, ShoppingBag, Users, Play, Trophy, Zap, LogOut, Globe, Dumbbell, Volume2, VolumeX, Target, Newspaper } from 'lucide-react';
+import { Player, Squad, Difficulty } from './types';
 import { INITIAL_PLAYERS, getInitialSquad, generateStarterSquad } from './data/players';
 import StoreScreen from './screens/StoreScreen';
 import SquadScreen from './screens/SquadScreen';
@@ -13,9 +13,12 @@ import TutorialScreen from './screens/TutorialScreen';
 import PracticeScreen from './screens/PracticeScreen';
 import DailyChest from './components/DailyChest';
 import WorldCupScreen from './screens/WorldCupScreen';
+import LeagueScreen from './screens/LeagueScreen';
+import NewsScreen from './screens/NewsScreen';
+import InterviewScreen from './screens/InterviewScreen';
 import { useAudio } from './contexts/AudioContext';
 
-type Tab = 'HOME' | 'SQUAD' | 'STORE' | 'MATCH' | 'UPGRADE' | 'ONLINE' | 'TRAIN' | 'MARKET' | 'TUTORIAL' | 'WORLDCUP' | 'PRACTICE';
+type Tab = 'HOME' | 'SQUAD' | 'STORE' | 'MATCH' | 'UPGRADE' | 'ONLINE' | 'TRAIN' | 'MARKET' | 'TUTORIAL' | 'WORLDCUP' | 'PRACTICE' | 'LEAGUE' | 'NEWS' | 'INTERVIEW';
 
 export default function App() {
   const { playAudio, stopAudio, stopAll, setVolume, volume } = useAudio();
@@ -30,6 +33,11 @@ export default function App() {
     formation: '4-3-3',
     lineup: getInitialSquad(INITIAL_PLAYERS)
   });
+  const [trophies, setTrophies] = useState<string[]>([]);
+
+  const [lastMatchResult, setLastMatchResult] = useState<any>(null);
+  const [leagueOpponent, setLeagueOpponent] = useState<string | null>(null);
+  const [leagueDifficulty, setLeagueDifficulty] = useState<Difficulty>('MEDIUM');
 
   const toggleMute = () => {
     if (volume > 0) {
@@ -81,6 +89,7 @@ export default function App() {
         }
         if (parsed.teamName) setTeamName(parsed.teamName);
         if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
+        if (parsed.trophies) setTrophies(parsed.trophies);
       }
     }
   }, []);
@@ -89,10 +98,10 @@ export default function App() {
   useEffect(() => {
     if (username) {
       localStorage.setItem(`fcweb_data_${username}`, JSON.stringify({ 
-        coins, inventory, squad, teamName, teamLogo, tutorialCompleted 
+        coins, inventory, squad, teamName, teamLogo, tutorialCompleted, trophies 
       }));
     }
-  }, [coins, inventory, squad, teamName, teamLogo, username, tutorialCompleted]);
+  }, [coins, inventory, squad, teamName, teamLogo, username, tutorialCompleted, trophies]);
 
   const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -119,10 +128,12 @@ export default function App() {
         }
         if (parsed.teamName) setTeamName(parsed.teamName);
         if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
+        if (parsed.trophies) setTrophies(parsed.trophies);
         setTutorialCompleted(parsed.tutorialCompleted || false);
       } else {
         // Reset to default for new user
         setCoins(1000);
+        setTrophies([]);
         const starterPlayers = generateStarterSquad();
         setInventory(starterPlayers);
         setSquad({
@@ -188,7 +199,7 @@ export default function App() {
     );
   }
 
-  const handleMatchFinish = (reward: number, xpGains: Record<string, number>) => {
+  const handleMatchFinish = (reward: number, xpGains: Record<string, number>, scoreA?: number, scoreB?: number, stats?: any) => {
     setCoins(c => c + reward);
     
     // Update XP in Inventory
@@ -210,7 +221,90 @@ export default function App() {
       })
     }));
 
-    setActiveTab('HOME');
+    if (stats) {
+      setLastMatchResult(stats);
+      
+      // Update League Table if it was a league match
+      if (leagueOpponent) {
+        const saved = localStorage.getItem(`league_data_${teamName}`);
+        if (saved) {
+          const data = JSON.parse(saved);
+          const newTable = data.table.map((entry: any) => {
+            if (entry.isUser) {
+              const goalsFor = scoreA || 0;
+              const goalsAgainst = scoreB || 0;
+              let won = entry.won;
+              let drawn = entry.drawn;
+              let lost = entry.lost;
+              let points = entry.points;
+
+              if (goalsFor > goalsAgainst) { won++; points += 3; }
+              else if (goalsFor === goalsAgainst) { drawn++; points += 1; }
+              else { lost++; }
+
+              return {
+                ...entry,
+                played: entry.played + 1,
+                won, drawn, lost,
+                gf: entry.gf + goalsFor,
+                ga: entry.ga + goalsAgainst,
+                points
+              };
+            }
+            return entry;
+          }).sort((a: any, b: any) => {
+            if (b.points !== a.points) return b.points - a.points;
+            return (b.gf - b.ga) - (a.gf - a.ga);
+          });
+          
+          localStorage.setItem(`league_data_${teamName}`, JSON.stringify({
+            ...data,
+            table: newTable,
+            matchDay: data.matchDay + 1
+          }));
+        }
+      }
+      
+      if (leagueOpponent && leagueDifficulty === 'HARD') {
+         setActiveTab('INTERVIEW');
+      } else {
+         setLeagueOpponent(null);
+         setActiveTab('HOME');
+      }
+    } else {
+      // Fallback if stats not provided but we have scores
+      if (scoreA !== undefined && scoreB !== undefined) {
+        setLastMatchResult({
+          score: `${scoreA}-${scoreB}`,
+          opponent: leagueOpponent || 'Opponent',
+          isWinner: scoreA > scoreB
+        });
+        if (leagueOpponent && leagueDifficulty === 'HARD') {
+           setActiveTab('INTERVIEW');
+        } else {
+           setLeagueOpponent(null);
+           setActiveTab('HOME');
+        }
+      } else {
+        setLeagueOpponent(null);
+        setActiveTab('HOME');
+      }
+    }
+  };
+
+  const addNews = (title: string, content: string, type: 'ACHIEVEMENT' | 'INTERVIEW' | 'WORLD_NEWS') => {
+    const newItem = {
+      id: Date.now().toString(),
+      title,
+      content,
+      date: new Date().toLocaleDateString(),
+      type,
+      image: `https://picsum.photos/seed/${Date.now()}/800/400`
+    };
+    const savedNews = localStorage.getItem('fcweb_news');
+    const news = savedNews ? JSON.parse(savedNews) : [];
+    const updatedNews = [newItem, ...news].slice(0, 20);
+    localStorage.setItem('fcweb_news', JSON.stringify(updatedNews));
   };
 
   const renderTab = () => {
@@ -235,13 +329,74 @@ export default function App() {
           setInventory(inv => [...inv, player]);
         }} />;
       case 'MATCH':
-        return <MatchScreen squad={squad} onFinish={handleMatchFinish} />;
+        return <MatchScreen 
+          squad={squad} 
+          onFinish={handleMatchFinish} 
+          opponentName={leagueOpponent || undefined} 
+          forcedDifficulty={leagueOpponent ? leagueDifficulty : undefined}
+        />;
       case 'ONLINE':
         return <OnlineScreen username={username} squad={squad} onMatchComplete={handleMatchFinish} />;
       case 'WORLDCUP':
-        return <WorldCupScreen onBack={() => setActiveTab('HOME')} />;
+        return <WorldCupScreen 
+          onBack={() => setActiveTab('HOME')} 
+          onWin={() => {
+            addNews("World Cup Glory!", `${teamName} has won the World Cup after a thrilling final!`, 'ACHIEVEMENT');
+            setTrophies(prev => [...prev, 'World Cup']);
+          }} 
+          onMatchComplete={(coins, xp, scoreA, scoreB, round) => {
+            setCoins(c => c + coins);
+            // Update XP
+            setInventory(prev => prev.map(p => xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p));
+            setSquad(prev => ({
+              ...prev,
+              lineup: prev.lineup.map(p => p && xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p)
+            }));
+            
+            // Check if interview is needed
+            if (round && ['R16', 'QF', 'SF', 'FINAL'].includes(round)) {
+               setLastMatchResult({
+                 score: `${scoreA}-${scoreB}`,
+                 opponent: 'World Cup Opponent',
+                 isWinner: (scoreA || 0) > (scoreB || 0),
+                 competition: 'World Cup ' + round,
+                 returnTab: 'WORLDCUP'
+               });
+               setActiveTab('INTERVIEW');
+            }
+          }} 
+        />;
       case 'PRACTICE':
         return <PracticeScreen squad={squad} onBack={() => setActiveTab('HOME')} />;
+      case 'LEAGUE':
+        return <LeagueScreen teamName={teamName} onBack={() => setActiveTab('HOME')} onStartMatch={(opponent, diff) => {
+          setLeagueOpponent(opponent);
+          setLeagueDifficulty(diff);
+          setActiveTab('MATCH');
+        }} />;
+      case 'NEWS':
+        return <NewsScreen onBack={() => setActiveTab('HOME')} />;
+      case 'INTERVIEW':
+        return <InterviewScreen 
+          matchResult={{
+            score: lastMatchResult?.score || '0-0',
+            opponent: lastMatchResult?.opponent || 'Opponent',
+            competition: lastMatchResult?.competition || (leagueOpponent ? 'Champions League' : 'Friendly'),
+            isWinner: lastMatchResult?.isWinner || false,
+            playerPerformance: 'The team showed great spirit on the pitch today.'
+          }} 
+          onFinish={(summary) => {
+            if (summary) {
+              addNews("Manager Speaks Out", summary, 'INTERVIEW');
+            }
+            setLeagueOpponent(null);
+            if (lastMatchResult?.returnTab) {
+               setActiveTab(lastMatchResult.returnTab);
+            } else {
+               setActiveTab('HOME');
+            }
+          }} 
+        />;
       case 'HOME':
       default:
         return (
@@ -259,7 +414,21 @@ export default function App() {
                 setInventory(inv => [...inv, rewardPlayer]);
               }} />
 
-              <button onClick={() => setActiveTab('WORLDCUP')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-yellow-500 transition-colors md:col-span-2 lg:col-span-1">
+              <button onClick={() => setActiveTab('LEAGUE')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Trophy className="w-12 h-12 text-emerald-400 mb-4" />
+                <h2 className="text-2xl font-bold text-white mb-2">Champions League</h2>
+                <p className="text-zinc-400 text-sm">Climb the league table and win the title.</p>
+              </button>
+
+              <button onClick={() => setActiveTab('NEWS')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Newspaper className="w-12 h-12 text-emerald-400 mb-4" />
+                <h2 className="text-2xl font-bold text-white mb-2">Football News</h2>
+                <p className="text-zinc-400 text-sm">Stay updated with the latest headlines.</p>
+              </button>
+
+              <button onClick={() => setActiveTab('WORLDCUP')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-yellow-500 transition-colors">
                 <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 <Globe className="w-12 h-12 text-yellow-400 mb-4" />
                 <h2 className="text-2xl font-bold text-white mb-2">World Cup</h2>
@@ -330,10 +499,17 @@ export default function App() {
   return (
     <div className={`min-h-screen text-white font-sans flex flex-col ${getBackgroundClass()}`}>
       {/* Header */}
-      <header className="h-16 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-50">
+      <header className={`h-16 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-50 ${activeTab === 'MATCH' ? 'hidden sm:flex' : 'flex'}`}>
         <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setActiveTab('HOME')}>
           <img src={teamLogo} alt="Team Logo" className="w-8 h-8 rounded-full border border-zinc-700" />
           <span className="text-xl font-bold italic tracking-wider hidden sm:block">{teamName}</span>
+          {trophies.length > 0 && (
+            <div className="flex items-center ml-4 space-x-1" title="Trophies Won">
+              {trophies.map((t, i) => (
+                <Trophy key={i} className="w-5 h-5 text-yellow-500" />
+              ))}
+            </div>
+          )}
         </div>
         
         <div className="flex items-center space-x-4">

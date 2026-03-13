@@ -1937,9 +1937,9 @@ export default function MatchScreen({
 
   return (
     <div 
-      className={`w-full bg-zinc-950 flex flex-col overflow-hidden relative touch-none overscroll-none select-none ${isMobile ? 'fixed inset-0' : 'h-full'}`} 
+      className={`w-full bg-zinc-950 flex flex-col overflow-hidden relative overscroll-none select-none ${isMobile ? 'fixed inset-0' : 'h-full'}`} 
       id="match-screen-root" 
-      style={{ touchAction: 'none', height: isMobile ? viewportHeight : '100%' }}
+      style={{ height: isMobile ? viewportHeight : '100%' }}
     >
       {/* Orientation Hint */}
       {isMobile && orientation === 'portrait' && (
@@ -1961,19 +1961,23 @@ export default function MatchScreen({
       )}
       {/* Setup Overlay */}
       {matchStateUI === 'setup' && (
-         <div className="absolute inset-0 z-[100] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-2 md:p-8 overflow-y-auto">
-            <div className={`text-center ${isMobile && orientation === 'landscape' ? 'mb-2' : 'mb-6 md:mb-12'}`}>
-              <h2 className={`${isMobile && orientation === 'landscape' ? 'text-xl' : 'text-3xl md:text-6xl'} font-black italic text-white mb-1 tracking-tighter`}>KICK OFF</h2>
+         <div className="absolute inset-0 z-[100] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+            <div className={`text-center ${orientation === 'landscape' ? 'mb-2' : 'mb-6 md:mb-12'}`}>
+              <h2 className={`${orientation === 'landscape' ? 'text-xl md:text-6xl' : 'text-3xl md:text-6xl'} font-black italic text-white mb-1 tracking-tighter`}>KICK OFF</h2>
               <p className="text-zinc-400 text-[10px] md:text-xl">Select your match difficulty</p>
             </div>
             
-            <div className={`grid gap-2 md:gap-8 w-full max-w-6xl ${isMobile && orientation === 'landscape' ? 'grid-cols-3' : 'grid-cols-1 md:grid-cols-3'}`}>
+            <div className={`grid gap-2 md:gap-8 w-full max-w-6xl ${orientation === 'landscape' ? 'grid-cols-3' : 'grid-cols-1'}`}>
               {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map(d => (
                 <button
                   key={d}
-                  onClick={() => { setDifficulty(d); setMatchStateUI('intro'); }}
-                  className={`rounded-xl md:rounded-3xl border-2 transition-all transform hover:scale-105 flex items-center ${
-                    isMobile && orientation === 'landscape' 
+                  onClick={(e) => { 
+                    e.stopPropagation();
+                    setDifficulty(d); 
+                    setMatchStateUI('intro'); 
+                  }}
+                  className={`rounded-xl md:rounded-3xl border-2 transition-all transform active:scale-95 flex items-center ${
+                    orientation === 'landscape' 
                       ? 'flex-col p-2 text-center' 
                       : 'p-4 md:p-8 flex-row md:flex-col text-left md:text-center'
                   } ${
@@ -1983,8 +1987,8 @@ export default function MatchScreen({
                   }`}
                 >
                   <div className={`${
-                    isMobile && orientation === 'landscape'
-                      ? 'w-8 h-8 mb-2'
+                    orientation === 'landscape'
+                      ? 'w-8 h-8 mb-1'
                       : 'w-10 h-10 md:w-16 md:h-16 mb-0 md:mb-6 mr-4 md:mr-0'
                   } rounded-lg md:rounded-2xl flex-shrink-0 flex items-center justify-center ${
                     d === 'EASY' ? 'bg-emerald-500' : d === 'MEDIUM' ? 'bg-yellow-500' : 'bg-red-500'
@@ -1993,12 +1997,12 @@ export default function MatchScreen({
                   </div>
                   <div className="flex-1">
                     <h3 className={`${
-                      isMobile && orientation === 'landscape' ? 'text-xs' : 'text-xl md:text-3xl'
+                      orientation === 'landscape' ? 'text-xs' : 'text-xl md:text-3xl'
                     } font-black mb-0.5 md:mb-4 ${
                       d === 'EASY' ? 'text-emerald-400' : d === 'MEDIUM' ? 'text-yellow-400' : 'text-red-400'
                     }`}>{d}</h3>
                     <p className={`${
-                      isMobile && orientation === 'landscape' ? 'hidden' : 'text-[10px] md:text-sm'
+                      orientation === 'landscape' ? 'hidden' : 'text-[10px] md:text-sm'
                     } text-zinc-400 leading-tight md:leading-relaxed`}>
                       {d === 'EASY' ? 'Relaxed pace. AI is less aggressive.' :
                        d === 'MEDIUM' ? 'Standard challenge. Balanced AI.' :
@@ -2010,18 +2014,32 @@ export default function MatchScreen({
             </div>
 
             {isMobile && (
-              <button 
-                onClick={() => {
-                  if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const elem = document.documentElement;
+                  try {
+                    if (elem.requestFullscreen) {
+                      elem.requestFullscreen();
+                    } else if ((elem as any).webkitRequestFullscreen) { /* Safari */
+                      (elem as any).webkitRequestFullscreen();
+                    } else if ((elem as any).msRequestFullscreen) { /* IE11 */
+                      (elem as any).msRequestFullscreen();
+                    }
+                  } catch (err) {
+                    console.error("Fullscreen error:", err);
                   }
                 }}
-                className="mt-8 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold rounded-full border border-zinc-700 flex items-center space-x-2"
+                className="mt-6 flex items-center space-x-3 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-black transition-all shadow-lg active:scale-95"
               >
-                <Maximize className="w-3 h-3" />
-                <span>GO FULLSCREEN</span>
+                <Maximize className="w-5 h-5" />
+                <span>MỞ TOÀN MÀN HÌNH (FULLSCREEN)</span>
               </button>
             )}
+            
+            <p className="mt-4 text-zinc-500 text-[9px] uppercase tracking-widest font-bold">
+              {isMobile ? 'Vuốt lên để xem thêm nếu cần' : 'Use mouse to select'}
+            </p>
          </div>
       )}
 

@@ -149,13 +149,11 @@ export default function MatchScreen({
     const root = document.getElementById('match-screen-root');
     if (root) {
       root.addEventListener('touchmove', preventDefault, { passive: false });
-      root.addEventListener('touchstart', preventDefault, { passive: false });
     }
 
     return () => {
       if (root) {
         root.removeEventListener('touchmove', preventDefault);
-        root.removeEventListener('touchstart', preventDefault);
       }
     };
   }, [matchStateUI]);
@@ -1971,7 +1969,7 @@ export default function MatchScreen({
               {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map(d => (
                 <button
                   key={d}
-                  onClick={(e) => { 
+                  onPointerDown={(e) => { 
                     e.stopPropagation();
                     setDifficulty(d); 
                     setMatchStateUI('intro'); 
@@ -2015,7 +2013,7 @@ export default function MatchScreen({
 
             {isMobile && (
               <button
-                onClick={(e) => {
+                onPointerDown={(e) => {
                   e.stopPropagation();
                   const elem = document.documentElement;
                   try {
@@ -2369,38 +2367,38 @@ export default function MatchScreen({
 
           {/* Intro Overlay */}
           {matchStateUI === 'intro' && (
-            <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center p-12">
+            <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center p-4 md:p-12 overflow-hidden">
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-500 via-transparent to-transparent" />
               
-              <div className="relative z-10 flex flex-col items-center text-center">
-                <h2 className="text-7xl font-black italic mb-4 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-white to-cyan-400 tracking-tighter">
+              <div className="relative z-10 flex flex-col items-center text-center w-full max-w-4xl">
+                <h2 className={`${orientation === 'landscape' && isMobile ? 'text-3xl mb-2' : 'text-5xl md:text-7xl mb-4'} font-black italic text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-white to-cyan-400 tracking-tighter`}>
                   MATCH DAY
                 </h2>
-                <div className="h-1 w-32 bg-emerald-500 mb-12" />
+                <div className={`${orientation === 'landscape' && isMobile ? 'h-0.5 w-16 mb-4' : 'h-1 w-32 mb-8 md:mb-12'} bg-emerald-500`} />
                 
-                <div className="text-3xl font-black mb-16 text-zinc-300 tracking-widest uppercase">
+                <div className={`${orientation === 'landscape' && isMobile ? 'text-sm mb-4' : 'text-xl md:text-3xl mb-8 md:mb-16'} font-black text-zinc-300 tracking-widest uppercase`}>
                   {introStage === 'walking' && "Players Entering Pitch"}
                   {introStage === 'anthem' && "National Anthems"}
                   {introStage === 'warmup' && "Final Preparations"}
                 </div>
 
-                <div className="flex items-center space-x-20 mb-16">
+                <div className={`flex items-center ${orientation === 'landscape' && isMobile ? 'space-x-8 mb-4' : 'space-x-10 md:space-x-20 mb-8 md:mb-16'}`}>
                   <div className="flex flex-col items-center group">
-                    <div className="w-32 h-32 bg-blue-600 rounded-3xl mb-6 shadow-[0_0_40px_rgba(37,99,235,0.6)] transform -rotate-6 group-hover:rotate-0 transition-transform duration-500 flex items-center justify-center text-4xl font-black text-white">
+                    <div className={`${orientation === 'landscape' && isMobile ? 'w-16 h-16 text-xl mb-2' : 'w-24 h-24 md:w-32 md:h-32 text-2xl md:text-4xl mb-4 md:mb-6'} bg-blue-600 rounded-2xl md:rounded-3xl shadow-[0_0_40px_rgba(37,99,235,0.6)] transform -rotate-6 group-hover:rotate-0 transition-transform duration-500 flex items-center justify-center font-black text-white`}>
                       {userTeamName ? userTeamName.substring(0, 3).toUpperCase() : 'YOU'}
                     </div>
-                    <span className="text-3xl font-black italic tracking-tight">{userTeamName || 'HOME'}</span>
+                    <span className={`${orientation === 'landscape' && isMobile ? 'text-sm' : 'text-xl md:text-3xl'} font-black italic tracking-tight`}>{userTeamName || 'HOME'}</span>
                   </div>
-                  <div className="text-5xl font-black text-zinc-700 italic">VS</div>
+                  <div className={`${orientation === 'landscape' && isMobile ? 'text-2xl' : 'text-3xl md:text-5xl'} font-black text-zinc-700 italic`}>VS</div>
                   <div className="flex flex-col items-center group">
-                    <div className="w-32 h-32 bg-red-600 rounded-3xl mb-6 shadow-[0_0_40px_rgba(239,68,68,0.6)] transform rotate-6 group-hover:rotate-0 transition-transform duration-500 flex items-center justify-center text-4xl font-black text-white">
+                    <div className={`${orientation === 'landscape' && isMobile ? 'w-16 h-16 text-xl mb-2' : 'w-24 h-24 md:w-32 md:h-32 text-2xl md:text-4xl mb-4 md:mb-6'} bg-red-600 rounded-2xl md:rounded-3xl shadow-[0_0_40px_rgba(239,68,68,0.6)] transform rotate-6 group-hover:rotate-0 transition-transform duration-500 flex items-center justify-center font-black text-white`}>
                       {opponentName ? opponentName.substring(0, 3).toUpperCase() : 'AI'}
                     </div>
-                    <span className="text-3xl font-black italic tracking-tight">{opponentName || 'AWAY'}</span>
+                    <span className={`${orientation === 'landscape' && isMobile ? 'text-sm' : 'text-xl md:text-3xl'} font-black italic tracking-tight`}>{opponentName || 'AWAY'}</span>
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-3 text-zinc-500 font-black text-sm tracking-[0.2em] uppercase">
+                <div className="flex items-center space-x-3 text-zinc-500 font-black text-[10px] md:text-sm tracking-[0.2em] uppercase">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                   <span>Kick off in {introTimer}s</span>
                 </div>

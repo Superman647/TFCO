@@ -496,10 +496,12 @@ export default function App() {
     }
   };
 
+  const isMatchTab = ['MATCH', 'WORLDCUP', 'ONLINE', 'PRACTICE', 'TRAIN'].includes(activeTab);
+
   return (
     <div className={`min-h-screen text-white font-sans flex flex-col ${getBackgroundClass()}`}>
       {/* Header */}
-      <header className={`h-16 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-50 ${activeTab === 'MATCH' ? 'hidden sm:flex' : 'flex'}`}>
+      <header className={`h-16 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-50 ${isMatchTab ? 'hidden md:flex' : 'flex'}`}>
         <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setActiveTab('HOME')}>
           <img src={teamLogo} alt="Team Logo" className="w-8 h-8 rounded-full border border-zinc-700" />
           <span className="text-xl font-bold italic tracking-wider hidden sm:block">{teamName}</span>

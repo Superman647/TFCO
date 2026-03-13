@@ -3,7 +3,7 @@ import { Squad, Player, Difficulty } from '../types';
 import { generateRandomPlayer } from '../data/players';
 import { FORMATION_POSITIONS } from '../constants';
 import { useAudio } from '../contexts/AudioContext';
-import { Footprints, Target, Trophy, Timer, Play, Users } from 'lucide-react';
+import { Footprints, Target, Trophy, Timer, Play, Users, Maximize } from 'lucide-react';
 
 interface Props {
   squad: Squad;
@@ -123,13 +123,17 @@ export default function MatchScreen({
   const touchStart = useRef<{ x: number, y: number, time: number } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape');
+  const [viewportHeight, setViewportHeight] = useState('100vh');
   const [joystick, setJoystick] = useState<{ x: number, y: number, active: boolean }>({ x: 0, y: 0, active: false });
   const joystickRef = useRef<{ startX: number, startY: number } | null>(null);
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isSmallScreen = window.innerWidth < 1024; // Increased threshold for landscape mobile
+      setIsMobile(isMobileUA || isSmallScreen);
       setOrientation(window.innerHeight > window.innerWidth ? 'portrait' : 'landscape');
+      setViewportHeight(`${window.innerHeight}px`);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -1932,10 +1936,17 @@ export default function MatchScreen({
   };
 
   return (
-    <div className="h-full w-full bg-transparent flex flex-col overflow-hidden relative touch-none overscroll-none select-none" id="match-screen-root" style={{ touchAction: 'none' }}>
+    <div 
+      className={`w-full bg-zinc-950 flex flex-col overflow-hidden relative touch-none overscroll-none select-none ${isMobile ? 'fixed inset-0' : 'h-full'}`} 
+      id="match-screen-root" 
+      style={{ touchAction: 'none', height: isMobile ? viewportHeight : '100%' }}
+    >
       {/* Orientation Hint */}
       {isMobile && orientation === 'portrait' && (
-        <div className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center">
+        <div 
+          className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center"
+          style={{ height: viewportHeight }}
+        >
           <div className="w-24 h-24 mb-8 text-emerald-500 animate-bounce">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
@@ -1950,89 +1961,122 @@ export default function MatchScreen({
       )}
       {/* Setup Overlay */}
       {matchStateUI === 'setup' && (
-         <div className="absolute inset-0 z-[100] bg-zinc-950/80 backdrop-blur-md flex flex-col items-center justify-center p-8">
-            <div className="text-center mb-12">
-              <h2 className="text-6xl font-black italic text-white mb-4 tracking-tighter">KICK OFF</h2>
-              <p className="text-zinc-400 text-xl">Select your match difficulty</p>
+         <div className="absolute inset-0 z-[100] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-2 md:p-8 overflow-y-auto">
+            <div className={`text-center ${isMobile && orientation === 'landscape' ? 'mb-2' : 'mb-6 md:mb-12'}`}>
+              <h2 className={`${isMobile && orientation === 'landscape' ? 'text-xl' : 'text-3xl md:text-6xl'} font-black italic text-white mb-1 tracking-tighter`}>KICK OFF</h2>
+              <p className="text-zinc-400 text-[10px] md:text-xl">Select your match difficulty</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
+            <div className={`grid gap-2 md:gap-8 w-full max-w-6xl ${isMobile && orientation === 'landscape' ? 'grid-cols-3' : 'grid-cols-1 md:grid-cols-3'}`}>
               {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map(d => (
                 <button
                   key={d}
                   onClick={() => { setDifficulty(d); setMatchStateUI('intro'); }}
-                  className={`p-8 rounded-3xl border-2 transition-all transform hover:scale-105 flex flex-col items-center text-center ${
+                  className={`rounded-xl md:rounded-3xl border-2 transition-all transform hover:scale-105 flex items-center ${
+                    isMobile && orientation === 'landscape' 
+                      ? 'flex-col p-2 text-center' 
+                      : 'p-4 md:p-8 flex-row md:flex-col text-left md:text-center'
+                  } ${
                     d === 'EASY' ? 'border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20' :
                     d === 'MEDIUM' ? 'border-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20' :
                     'border-red-500 bg-red-500/10 hover:bg-red-500/20'
                   }`}
                 >
-                  <div className={`w-16 h-16 rounded-2xl mb-6 flex items-center justify-center ${
+                  <div className={`${
+                    isMobile && orientation === 'landscape'
+                      ? 'w-8 h-8 mb-2'
+                      : 'w-10 h-10 md:w-16 md:h-16 mb-0 md:mb-6 mr-4 md:mr-0'
+                  } rounded-lg md:rounded-2xl flex-shrink-0 flex items-center justify-center ${
                     d === 'EASY' ? 'bg-emerald-500' : d === 'MEDIUM' ? 'bg-yellow-500' : 'bg-red-500'
                   }`}>
-                    <span className="text-2xl font-black text-black">{d[0]}</span>
+                    <span className="text-sm md:text-2xl font-black text-black">{d[0]}</span>
                   </div>
-                  <h3 className={`text-3xl font-black mb-4 ${
-                    d === 'EASY' ? 'text-emerald-400' : d === 'MEDIUM' ? 'text-yellow-400' : 'text-red-400'
-                  }`}>{d}</h3>
-                  <p className="text-zinc-400 text-sm leading-relaxed">
-                    {d === 'EASY' ? 'Relaxed pace. AI is less aggressive. Perfect for learning.' :
-                     d === 'MEDIUM' ? 'Standard challenge. Balanced AI movement and tactics.' :
-                     'Pro level. Aggressive AI, faster reactions, and tight marking.'}
-                  </p>
+                  <div className="flex-1">
+                    <h3 className={`${
+                      isMobile && orientation === 'landscape' ? 'text-xs' : 'text-xl md:text-3xl'
+                    } font-black mb-0.5 md:mb-4 ${
+                      d === 'EASY' ? 'text-emerald-400' : d === 'MEDIUM' ? 'text-yellow-400' : 'text-red-400'
+                    }`}>{d}</h3>
+                    <p className={`${
+                      isMobile && orientation === 'landscape' ? 'hidden' : 'text-[10px] md:text-sm'
+                    } text-zinc-400 leading-tight md:leading-relaxed`}>
+                      {d === 'EASY' ? 'Relaxed pace. AI is less aggressive.' :
+                       d === 'MEDIUM' ? 'Standard challenge. Balanced AI.' :
+                       'Pro level. Aggressive AI, faster reactions.'}
+                    </p>
+                  </div>
                 </button>
               ))}
             </div>
+
+            {isMobile && (
+              <button 
+                onClick={() => {
+                  if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                  }
+                }}
+                className="mt-8 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold rounded-full border border-zinc-700 flex items-center space-x-2"
+              >
+                <Maximize className="w-3 h-3" />
+                <span>GO FULLSCREEN</span>
+              </button>
+            )}
          </div>
       )}
 
       {/* Main Game Area */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 relative">
+      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden w-full">
         {/* Scoreboard */}
         {mode !== 'TRAINING' && (
-          <div className="w-full max-w-5xl flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-t-3xl p-3 md:p-6 shadow-2xl z-10">
+          <div className={`w-full max-w-5xl flex justify-between items-center bg-zinc-900/95 backdrop-blur-md border-zinc-800 shadow-2xl z-20 
+            ${isMobile 
+              ? 'absolute top-0 left-0 right-0 p-1 md:p-2 border-b' 
+              : 'relative mb-0 border rounded-t-3xl p-6'
+            }`}>
             <div className="flex items-center space-x-2 md:space-x-6">
               <div className="flex flex-col items-center">
-                <div className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transform -rotate-3 overflow-hidden bg-blue-600`}>
+                <div className={`w-7 h-7 md:w-14 md:h-14 rounded-lg md:rounded-2xl flex items-center justify-center font-black text-[9px] md:text-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transform -rotate-3 overflow-hidden bg-blue-600`}>
                    {userTeamName ? userTeamName.substring(0, 3).toUpperCase() : 'YOU'}
                 </div>
-                <span className="text-[8px] md:text-xs font-bold text-blue-400 mt-1 md:mt-2 uppercase tracking-widest">{userTeamName || 'Home'}</span>
+                <span className="text-[5px] md:text-xs font-bold text-blue-400 mt-0.5 md:mt-2 uppercase tracking-widest">{userTeamName || 'Home'}</span>
               </div>
-              <span className="text-3xl md:text-6xl font-black italic tracking-tighter">{score.A}</span>
+              <span className="text-lg md:text-6xl font-black italic tracking-tighter">{score.A}</span>
             </div>
             
-            <div className="flex flex-col items-center px-4 md:px-8 border-x border-zinc-800">
-              <span className="text-zinc-500 font-black text-[8px] md:text-xs uppercase tracking-[0.3em] mb-1">Time</span>
-              <div className="flex items-baseline space-x-1">
-                <span className="text-2xl md:text-5xl font-mono font-black text-emerald-400 tabular-nums">{timeLeft}</span>
-                <span className="text-lg md:text-2xl font-mono font-bold text-emerald-600">'</span>
+            <div className="flex flex-col items-center px-1 md:px-8 border-x border-zinc-800">
+              <span className="text-zinc-500 font-black text-[5px] md:text-xs uppercase tracking-[0.2em] mb-0.5">Time</span>
+              <div className="flex items-baseline space-x-0.5">
+                <span className="text-lg md:text-5xl font-mono font-black text-emerald-400 tabular-nums">{timeLeft}</span>
+                <span className="text-xs md:text-2xl font-mono font-bold text-emerald-600">'</span>
               </div>
-              <div className="mt-1 md:mt-2 px-2 md:px-3 py-0.5 bg-zinc-800 rounded-full text-[8px] md:text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+              <div className="mt-0.5 md:mt-2 px-1 md:px-3 py-0 bg-zinc-800 rounded-full text-[5px] md:text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
                 {half === 1 ? '1st' : '2nd'}
               </div>
             </div>
 
             <div className="flex items-center space-x-2 md:space-x-6">
-              <span className="text-3xl md:text-6xl font-black italic tracking-tighter">{score.B}</span>
+              <span className="text-lg md:text-6xl font-black italic tracking-tighter">{score.B}</span>
               <div className="flex flex-col items-center">
-                <div className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-2xl shadow-[0_0_20px_rgba(220,38,38,0.4)] transform rotate-3 overflow-hidden bg-red-600`}>
+                <div className={`w-7 h-7 md:w-14 md:h-14 rounded-lg md:rounded-2xl flex items-center justify-center font-black text-[9px] md:text-2xl shadow-[0_0_20px_rgba(220,38,38,0.4)] transform rotate-3 overflow-hidden bg-red-600`}>
                    {opponentName ? opponentName.substring(0, 3).toUpperCase() : 'AI'}
                 </div>
-                <span className="text-[8px] md:text-xs font-bold text-red-400 mt-1 md:mt-2 uppercase tracking-widest">{opponentName || 'Away'}</span>
+                <span className="text-[5px] md:text-xs font-bold text-red-400 mt-0.5 md:mt-2 uppercase tracking-widest">{opponentName || 'Away'}</span>
               </div>
             </div>
           </div>
         )}
 
         {mode === 'TRAINING' && (
-          <div className="w-full max-w-5xl flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-t-3xl p-6 shadow-2xl z-10">
-            <div className="flex items-center space-x-4">
-              <div className="p-2 bg-emerald-500/20 rounded-lg">
-                <Footprints className="w-5 h-5 text-emerald-400" />
+          <div className={`w-full max-w-5xl flex justify-between items-center bg-zinc-900 border border-zinc-800 shadow-2xl z-20 
+            ${isMobile ? 'absolute top-0 left-0 right-0 p-2 border-b' : 'relative rounded-t-3xl p-6'}`}>
+            <div className="flex items-center space-x-2 md:space-x-4">
+              <div className="p-1.5 md:p-2 bg-emerald-500/20 rounded-lg">
+                <Footprints className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
               </div>
               <div>
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block">Drill</span>
-                <span className="text-lg font-black italic text-white">{drillType || 'FREE PRACTICE'}</span>
+                <span className="text-[8px] md:text-xs font-bold text-zinc-500 uppercase tracking-widest block">Drill</span>
+                <span className="text-sm md:text-lg font-black italic text-white">{drillType || 'FREE PRACTICE'}</span>
               </div>
             </div>
             {drillType === 'SHOOTING' && (
@@ -2045,12 +2089,9 @@ export default function MatchScreen({
             )}
             <button 
               onClick={handleFinish}
-              className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black rounded-full transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 flex items-center space-x-2"
+              className="px-4 md:px-8 py-1.5 md:py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] md:text-sm font-black rounded-full transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 flex items-center space-x-2"
             >
-              <span>FINISH TRAINING</span>
-              <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
-                <span className="text-[10px]">✓</span>
-              </div>
+              <span>FINISH</span>
             </button>
           </div>
         )}
@@ -2097,7 +2138,8 @@ export default function MatchScreen({
         )}
 
         {/* Pitch Container */}
-        <div className="w-full max-w-5xl aspect-[10/6] bg-zinc-900 border-x border-b border-zinc-800 rounded-b-xl md:rounded-b-3xl overflow-hidden relative shadow-[0_30px_60px_rgba(0,0,0,0.5)]">
+        <div className={`w-full max-w-5xl aspect-[10/6] bg-zinc-900 border-zinc-800 overflow-hidden relative shadow-[0_30px_60px_rgba(0,0,0,0.5)]
+          ${isMobile ? 'h-full w-full border-none' : 'border-x border-b rounded-b-3xl'}`}>
           <canvas 
             ref={canvasRef}
             width={PITCH_W}

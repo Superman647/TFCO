@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, ArrowLeft, Play, Save, RotateCcw } from 'lucide-react';
 import { LeagueTableEntry, Squad } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface LeagueScreenProps {
   onBack: () => void;

@@ -3,7 +3,7 @@ import { Gift, Clock } from 'lucide-react';
 import { Player } from '../types';
 import { generateRandomPlayer } from '../data/players';
 import PlayerCard from './PlayerCard';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   onClaim: (coins: number, player: Player) => void;

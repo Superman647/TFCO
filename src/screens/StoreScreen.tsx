@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Player } from '../types';
 import { generateRandomPlayer } from '../data/players';
 import PlayerCard from '../components/PlayerCard';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAudio } from '../contexts/AudioContext';
 
 interface Props {

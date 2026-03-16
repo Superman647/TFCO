@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Home, ShoppingBag, Users, Play, Trophy, Zap, LogOut, Globe, Dumbbell, Volume2, VolumeX, Target, Newspaper, Shield, Gamepad2, Sparkles, ChevronRight, Swords } from 'lucide-react';
 import { Player, Squad, Difficulty } from './types';
 import { INITIAL_PLAYERS, getInitialSquad, generateStarterSquad } from './data/players';
 import StoreScreen from './screens/StoreScreen';
@@ -14,476 +15,429 @@ import DailyChest from './components/DailyChest';
 import WorldCupScreen from './screens/WorldCupScreen';
 import LeagueScreen from './screens/LeagueScreen';
 import NewsScreen from './screens/NewsScreen';
+import InterviewScreen from './screens/InterviewScreen';
 import { useAudio } from './contexts/AudioContext';
 
 type Tab = 'HOME' | 'SQUAD' | 'STORE' | 'MATCH' | 'UPGRADE' | 'ONLINE' | 'TRAIN' | 'MARKET' | 'TUTORIAL' | 'WORLDCUP' | 'PRACTICE' | 'LEAGUE' | 'NEWS' | 'INTERVIEW';
 
-// ── FC Online Icon SVG components
-const Icon = ({ d, size = 22 }: { d: string; size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d={d} />
-  </svg>
-);
+const quickModes: { key: Tab; title: string; description: string; icon: React.ElementType; accent: string }[] = [
+  { key: 'MATCH', title: 'Exhibition Match', description: 'Đá ngay một trận giao hữu với nhịp độ nhanh, dễ vào trận.', icon: Swords, accent: 'from-emerald-500/20 to-cyan-500/10' },
+  { key: 'LEAGUE', title: 'Career League', description: 'Leo bảng xếp hạng, kiếm tiền thưởng và mở rộng đội hình.', icon: Trophy, accent: 'from-yellow-500/20 to-amber-500/10' },
+  { key: 'ONLINE', title: 'Online PvP', description: 'Đối đầu người chơi khác với điều khiển thời gian thực.', icon: Globe, accent: 'from-sky-500/20 to-indigo-500/10' },
+  { key: 'PRACTICE', title: 'Training Arena', description: 'Luyện rê bóng, chuyền và dứt điểm bằng bàn phím hoặc mobile.', icon: Target, accent: 'from-fuchsia-500/20 to-rose-500/10' },
+];
 
-// ── Nav Item
-const NavBtn = ({ label, icon, active, onClick, badge }: { label: string; icon: React.ReactNode; active?: boolean; onClick: () => void; badge?: number }) => (
-  <button onClick={onClick}
-    className={`relative flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all duration-150 font-bold text-[10px] tracking-widest uppercase cursor-pointer select-none
-      ${active
-        ? 'text-[#0b8fff] bg-[#0b5fce]/20'
-        : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-      }`}>
-    {icon}
-    <span style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 9, fontWeight: 700 }}>{label}</span>
-    {badge !== undefined && badge > 0 && (
-      <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#ef4444] rounded-full text-[9px] font-black flex items-center justify-center text-white">{badge}</span>
-    )}
-  </button>
-);
-
-// ── Home card
-const HomeCard = ({ icon, title, desc, color, onClick }: { icon: string; title: string; desc: string; color: string; onClick: () => void }) => (
-  <button onClick={onClick} className="fc-home-card p-6 flex flex-col gap-3 text-left w-full group transition-all">
-    <div className="text-3xl">{icon}</div>
-    <div>
-      <div className="font-black text-white text-lg leading-tight" style={{ fontFamily: "'Rajdhani', sans-serif" }}>{title}</div>
-      <div className="text-xs text-white/50 mt-1 font-medium leading-tight">{desc}</div>
-    </div>
-    <div className="mt-auto flex items-center gap-1 text-xs font-black tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-opacity" style={{ color }}>
-      <span>CHƠI NGAY</span>
-      <span>→</span>
-    </div>
-  </button>
-);
-
-// ── Login Screen
-function LoginScreen({ onLogin }: { onLogin: (username: string, teamName: string) => void }) {
-  const [uname, setUname] = useState('');
-  const [tname, setTname] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [focused, setFocused] = useState<'u' | 't' | null>(null);
-  const particlesRef = useRef<HTMLDivElement>(null);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!uname.trim()) return;
-    setLoading(true);
-    setTimeout(() => onLogin(uname.trim(), tname.trim() || `${uname.trim()}'s FC`), 800);
-  };
-
-  return (
-    <div className="min-h-screen relative flex flex-col overflow-hidden" style={{ background: '#05080f' }}>
-      {/* Animated pitch background */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=2070&auto=format&fit=crop')`,
-          backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.25) saturate(0.6)',
-        }} />
-        {/* Green field glow */}
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 50% at 50% 100%, rgba(0,100,30,0.3), transparent)' }} />
-        {/* Blue top light */}
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 100% 60% at 50% -20%, rgba(11,95,206,0.35), transparent)' }} />
-        {/* Grid lines decoration */}
-        <div className="absolute inset-0 opacity-5" style={{
-          backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
-          backgroundSize: '60px 60px',
-        }} />
-      </div>
-
-      {/* Top bar */}
-      <div className="relative z-10 flex items-center justify-between px-8 py-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#0b5fce] flex items-center justify-center text-white font-black text-lg" style={{ fontFamily: "'Bebas Neue'" }}>FC</div>
-          <div>
-            <div className="font-black text-white text-base leading-none" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 3 }}>FC ONLINE</div>
-            <div className="text-[9px] text-[#0b8fff] font-bold tracking-[0.3em]">FOOTBALL MANAGER</div>
-          </div>
-        </div>
-        <div className="text-[10px] text-white/30 font-bold tracking-widest uppercase">Season 2024/25</div>
-      </div>
-
-      {/* Main content */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm">
-          {/* Logo area */}
-          <div className="text-center mb-10">
-            <div className="text-[10px] font-black tracking-[0.5em] text-[#0b8fff] uppercase mb-4">WELCOME TO</div>
-            <h1 className="text-8xl font-black text-white leading-none mb-1" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 6 }}>FC</h1>
-            <h1 className="text-5xl font-black text-white leading-none mb-4" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 4 }}>ONLINE</h1>
-            <div className="w-16 h-0.5 mx-auto" style={{ background: 'linear-gradient(90deg, transparent, #0b8fff, transparent)' }} />
-          </div>
-
-          {/* Login form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-black tracking-[0.3em] text-[#a0aec0] uppercase mb-2">Tên HLV</label>
-              <input
-                className="fc-input"
-                type="text"
-                placeholder="Nhập tên của bạn..."
-                value={uname}
-                onChange={e => setUname(e.target.value)}
-                maxLength={24}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black tracking-[0.3em] text-[#a0aec0] uppercase mb-2">Tên CLB</label>
-              <input
-                className="fc-input"
-                type="text"
-                placeholder="Tên câu lạc bộ..."
-                value={tname}
-                onChange={e => setTname(e.target.value)}
-                maxLength={30}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!uname.trim() || loading}
-              className="btn-fc-primary w-full py-4 rounded-xl text-xl font-black disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-              style={{ fontFamily: "'Bebas Neue'", letterSpacing: 4 }}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-3">
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ĐANG VÀO...
-                </span>
-              ) : 'BẮT ĐẦU SỰ NGHIỆP'}
-            </button>
-          </form>
-
-          {/* Features */}
-          <div className="mt-8 grid grid-cols-3 gap-3">
-            {[['⚽', 'Trận Đấu', 'PvE & PvP'], ['🏆', 'Giải Đấu', 'League & WC'], ['🃏', 'Cầu Thủ', '100+ Cards']].map(([icon, title, sub]) => (
-              <div key={title} className="text-center p-3 rounded-xl bg-white/5 border border-white/8">
-                <div className="text-2xl mb-1">{icon}</div>
-                <div className="text-[10px] font-black text-white">{title}</div>
-                <div className="text-[9px] text-white/40 font-medium">{sub}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom */}
-      <div className="relative z-10 text-center py-4 text-[10px] text-white/20 font-medium">
-        FC Online Web Edition · All rights reserved
-      </div>
-    </div>
-  );
-}
-
-// ── Main App
 export default function App() {
   const { playAudio, stopAudio, stopAll, setVolume, volume } = useAudio();
   const [username, setUsername] = useState<string | null>(null);
-  const [teamName, setTeamName] = useState('My FC');
-  const [teamLogo, setTeamLogo] = useState('');
+  const [teamName, setTeamName] = useState<string>('My Team');
+  const [teamLogo, setTeamLogo] = useState<string>('https://ui-avatars.com/api/?name=MT&background=0f172a&color=22c55e');
   const [activeTab, setActiveTab] = useState<Tab>('HOME');
   const [coins, setCoins] = useState(2500);
-  const [gems, setGems] = useState(50);
+  const [tutorialCompleted, setTutorialCompleted] = useState(false);
   const [inventory, setInventory] = useState<Player[]>(INITIAL_PLAYERS.slice(0, 15));
-  const [squad, setSquad] = useState<Squad>({ formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
+  const [squad, setSquad] = useState<Squad>({
+    formation: '4-3-3',
+    lineup: getInitialSquad(INITIAL_PLAYERS)
+  });
   const [trophies, setTrophies] = useState<string[]>([]);
+  const [lastMatchResult, setLastMatchResult] = useState<any>(null);
   const [leagueOpponent, setLeagueOpponent] = useState<string | null>(null);
   const [leagueDifficulty, setLeagueDifficulty] = useState<Difficulty>('MEDIUM');
-  const [lastMatchResult, setLastMatchResult] = useState<any>(null);
-  const [muted, setMuted] = useState(false);
-  const [showCoinsAnim, setShowCoinsAnim] = useState(false);
 
-  // Load from localStorage
+  const teamOvr = useMemo(() => {
+    const valid = squad.lineup.filter(Boolean) as Player[];
+    return valid.length ? Math.round(valid.reduce((sum, p) => sum + p.ovr, 0) / valid.length) : 0;
+  }, [squad]);
+
+  const attackScore = useMemo(() => {
+    const valid = squad.lineup.filter(Boolean) as Player[];
+    return valid.length ? Math.round(valid.reduce((sum, p) => sum + (p.stats.sho + p.stats.pac + p.stats.dri) / 3, 0) / valid.length) : 0;
+  }, [squad]);
+
+  const balanceScore = useMemo(() => {
+    const valid = squad.lineup.filter(Boolean) as Player[];
+    return valid.length ? Math.round(valid.reduce((sum, p) => sum + (p.stats.pas + p.stats.def + p.stats.phy) / 3, 0) / valid.length) : 0;
+  }, [squad]);
+
+  const toggleMute = () => {
+    if (volume > 0) {
+      setVolume(0);
+    } else {
+      setVolume(0.3);
+      if (!['MATCH', 'WORLDCUP'].includes(activeTab)) playAudio('THEME', true);
+    }
+  };
+
   useEffect(() => {
-    const saved = localStorage.getItem('fcweb_user');
-    if (saved) {
-      setUsername(saved);
-      const data = localStorage.getItem(`fcweb_data_${saved}`);
+    if (!username) {
+      stopAll();
+      return;
+    }
+    if (activeTab === 'MATCH') {
+      stopAudio('THEME');
+      stopAudio('WORLDCUP_THEME');
+    } else if (activeTab === 'WORLDCUP') {
+      stopAudio('THEME');
+    } else {
+      stopAudio('WORLDCUP_THEME');
+      stopAudio('MATCH_AMBIENT');
+      playAudio('THEME', true);
+    }
+  }, [activeTab, username]);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('fcweb_user');
+    if (savedUser) {
+      setUsername(savedUser);
+      const data = localStorage.getItem(`fcweb_data_${savedUser}`);
       if (data) {
-        try {
-          const p = JSON.parse(data);
-          if (p.coins !== undefined) setCoins(p.coins);
-          if (p.gems !== undefined) setGems(p.gems);
-          if (p.inventory) setInventory(p.inventory);
-          if (p.squad?.formation) setSquad(p.squad);
-          if (p.teamName) setTeamName(p.teamName);
-          if (p.teamLogo) setTeamLogo(p.teamLogo);
-          if (p.trophies) setTrophies(p.trophies);
-        } catch {}
+        const parsed = JSON.parse(data);
+        setCoins(parsed.coins ?? 2500);
+        setInventory(parsed.inventory ?? INITIAL_PLAYERS.slice(0, 15));
+        setSquad(parsed.squad?.formation ? parsed.squad : { formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
+        if (parsed.teamName) setTeamName(parsed.teamName);
+        if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
+        if (parsed.trophies) setTrophies(parsed.trophies);
+        setTutorialCompleted(Boolean(parsed.tutorialCompleted));
       }
     }
   }, []);
 
-  // Save
   useEffect(() => {
-    if (username) {
-      localStorage.setItem(`fcweb_data_${username}`, JSON.stringify({ coins, gems, inventory, squad, teamName, teamLogo, trophies }));
-    }
-  }, [coins, gems, inventory, squad, teamName, teamLogo, username, trophies]);
+    if (!username) return;
+    localStorage.setItem(`fcweb_data_${username}`, JSON.stringify({
+      coins, inventory, squad, teamName, teamLogo, tutorialCompleted, trophies
+    }));
+  }, [coins, inventory, squad, teamName, teamLogo, username, tutorialCompleted, trophies]);
 
-  // Audio
-  useEffect(() => {
-    if (!username) { stopAll(); return; }
-    if (activeTab === 'MATCH' || activeTab === 'WORLDCUP' || activeTab === 'ONLINE' || activeTab === 'PRACTICE') {
-      stopAudio('THEME');
-    } else {
-      stopAudio('MATCH_AMBIENT');
-      if (!muted) playAudio('THEME', true);
-    }
-  }, [activeTab, username, muted]);
+  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const name = String(formData.get('username') || '').trim();
+    const tName = String(formData.get('teamName') || 'My Team').trim();
+    if (!name) return;
 
-  const handleLogin = (uname: string, tName: string) => {
-    setUsername(uname);
-    setTeamName(tName);
-    setTeamLogo(`https://ui-avatars.com/api/?name=${encodeURIComponent(tName)}&background=1565c0&color=fff&size=64&bold=true`);
-    localStorage.setItem('fcweb_user', uname);
-    const data = localStorage.getItem(`fcweb_data_${uname}`);
+    setUsername(name);
+    setTeamName(tName || 'My Team');
+    setTeamLogo(`https://ui-avatars.com/api/?name=${encodeURIComponent(tName || 'My Team')}&background=0f172a&color=22c55e&bold=true`);
+    localStorage.setItem('fcweb_user', name);
+
+    const data = localStorage.getItem(`fcweb_data_${name}`);
     if (data) {
-      try {
-        const p = JSON.parse(data);
-        if (p.coins !== undefined) setCoins(p.coins);
-        if (p.gems !== undefined) setGems(p.gems);
-        if (p.inventory) setInventory(p.inventory);
-        if (p.squad?.formation) setSquad(p.squad);
-        if (p.teamName) setTeamName(p.teamName);
-        if (p.teamLogo) setTeamLogo(p.teamLogo);
-        if (p.trophies) setTrophies(p.trophies);
-      } catch {}
-    } else {
-      setCoins(2500); setGems(50); setTrophies([]);
-      const starter = generateStarterSquad();
-      setInventory(starter);
-      setSquad({ formation: '4-3-3', lineup: getInitialSquad(starter) });
-      setTimeout(() => setActiveTab('TUTORIAL'), 300);
+      const parsed = JSON.parse(data);
+      setCoins(parsed.coins ?? 2500);
+      setInventory(parsed.inventory ?? INITIAL_PLAYERS.slice(0, 15));
+      setSquad(parsed.squad?.formation ? parsed.squad : { formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
+      if (parsed.teamName) setTeamName(parsed.teamName);
+      if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
+      if (parsed.trophies) setTrophies(parsed.trophies);
+      setTutorialCompleted(Boolean(parsed.tutorialCompleted));
+      return;
     }
+
+    const starterPlayers = generateStarterSquad();
+    setCoins(2500);
+    setTrophies([]);
+    setInventory(starterPlayers);
+    setSquad({ formation: '4-3-3', lineup: getInitialSquad(starterPlayers) });
+    setTutorialCompleted(false);
+    setActiveTab('TUTORIAL');
   };
 
   const handleLogout = () => {
     setUsername(null);
-    stopAll();
     localStorage.removeItem('fcweb_user');
+  };
+
+  const getBackgroundClass = () => {
+    if (!username) return 'bg-auth-stadium';
+    switch (activeTab) {
+      case 'WORLDCUP': return 'bg-game-worldcup';
+      case 'TRAIN': return 'bg-game-training';
+      default: return 'bg-game-default';
+    }
   };
 
   const handleMatchFinish = (reward: number, xpGains: Record<string, number>, scoreA?: number, scoreB?: number, stats?: any) => {
     setCoins(c => c + reward);
-    if (reward > 200) { setShowCoinsAnim(true); setTimeout(() => setShowCoinsAnim(false), 2000); }
     setInventory(prev => prev.map(p => xpGains[p.id] ? { ...p, xp: (p.xp || 0) + xpGains[p.id] } : p));
     setSquad(prev => ({ ...prev, lineup: prev.lineup.map(p => p && xpGains[p.id] ? { ...p, xp: (p.xp || 0) + xpGains[p.id] } : p) }));
-    if (stats) setLastMatchResult(stats);
-    setLeagueOpponent(null);
-    setActiveTab('HOME');
-  };
 
-  if (!username) return <LoginScreen onLogin={handleLogin} />;
+    const payload = stats || {
+      score: `${scoreA ?? 0}-${scoreB ?? 0}`,
+      opponent: leagueOpponent || 'Opponent',
+      isWinner: (scoreA ?? 0) > (scoreB ?? 0),
+      competition: leagueOpponent ? 'League Match' : 'Friendly'
+    };
+    setLastMatchResult(payload);
 
-  const isMatchActive = ['MATCH', 'WORLDCUP', 'ONLINE', 'PRACTICE', 'TRAIN'].includes(activeTab);
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'TUTORIAL': return <TutorialScreen onComplete={() => { setCoins(c => c + 800); setActiveTab('HOME'); }} />;
-      case 'STORE': return <StoreScreen coins={coins} setCoins={setCoins} inventory={inventory} setInventory={setInventory} />;
-      case 'SQUAD': return <SquadScreen squad={squad} setSquad={setSquad} inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
-      case 'UPGRADE': return <UpgradeScreen inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
-      case 'TRAIN': return <TrainScreen inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
-      case 'MARKET': return <TransferMarketScreen coins={coins} onBuy={(player, cost) => { setCoins(c => c - cost); setInventory(inv => [...inv, player]); }} />;
-      case 'MATCH': return (
-        <MatchScreen squad={squad} onFinish={handleMatchFinish}
-          opponentName={leagueOpponent || undefined}
-          userTeamName={teamName}
-          forcedDifficulty={leagueOpponent ? leagueDifficulty : undefined} />
-      );
-      case 'ONLINE': return <OnlineScreen username={username} squad={squad} onMatchComplete={handleMatchFinish} />;
-      case 'WORLDCUP': return (
-        <WorldCupScreen
-          onBack={() => setActiveTab('HOME')}
-          onWin={() => { setTrophies(prev => [...prev, 'World Cup']); }}
-          onMatchComplete={(coins, xp, scoreA, scoreB) => {
-            setCoins(c => c + coins);
-            setInventory(prev => prev.map(p => xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p));
-            setSquad(prev => ({ ...prev, lineup: prev.lineup.map(p => p && xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p) }));
-          }}
-        />
-      );
-      case 'PRACTICE': return <PracticeScreen squad={squad} onBack={() => setActiveTab('HOME')} />;
-      case 'LEAGUE': return (
-        <LeagueScreen teamName={teamName} onBack={() => setActiveTab('HOME')}
-          onStartMatch={(opponent, diff) => { setLeagueOpponent(opponent); setLeagueDifficulty(diff); setActiveTab('MATCH'); }} />
-      );
-      case 'NEWS': return <NewsScreen onBack={() => setActiveTab('HOME')} />;
-      case 'HOME':
-      default:
-        return <HomeScreen
-          username={username} teamName={teamName} teamLogo={teamLogo}
-          coins={coins} gems={gems} trophies={trophies}
-          onNavigate={setActiveTab}
-          onClaim={(rc, rp) => { setCoins(c => c + rc); setInventory(inv => [...inv, rp]); }}
-        />;
+    if (leagueOpponent && leagueDifficulty === 'HARD') {
+      setActiveTab('INTERVIEW');
+    } else {
+      setLeagueOpponent(null);
+      setActiveTab('HOME');
     }
   };
 
-  return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[#05080f] text-white" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-      {/* ── Top Header ── */}
-      {!isMatchActive && (
-        <header className="fc-header flex items-center justify-between px-4 py-2 shrink-0 z-50">
-          {/* Left: Team */}
-          <button onClick={() => setActiveTab('HOME')} className="flex items-center gap-3 group">
-            <img src={teamLogo || `https://ui-avatars.com/api/?name=${teamName}&background=1565c0&color=fff&size=64&bold=true`}
-              alt="" className="w-9 h-9 rounded-xl border border-white/10" />
-            <div className="hidden sm:block">
-              <div className="font-black text-sm text-white leading-none group-hover:text-[#0b8fff] transition-colors" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 2 }}>{teamName.toUpperCase()}</div>
-              <div className="text-[10px] text-white/40 font-bold">{username}</div>
+  const addNews = (title: string, content: string, type: 'ACHIEVEMENT' | 'INTERVIEW' | 'WORLD_NEWS') => {
+    const newItem = {
+      id: Date.now().toString(),
+      title,
+      content,
+      date: new Date().toLocaleDateString(),
+      type,
+      image: `https://picsum.photos/seed/${Date.now()}/800/400`
+    };
+    const savedNews = localStorage.getItem('fcweb_news');
+    const news = savedNews ? JSON.parse(savedNews) : [];
+    localStorage.setItem('fcweb_news', JSON.stringify([newItem, ...news].slice(0, 20)));
+  };
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case 'TUTORIAL':
+        return <TutorialScreen onComplete={() => { setTutorialCompleted(true); setCoins(c => c + 500); setActiveTab('HOME'); }} />;
+      case 'STORE':
+        return <StoreScreen coins={coins} setCoins={setCoins} inventory={inventory} setInventory={setInventory} />;
+      case 'SQUAD':
+        return <SquadScreen squad={squad} setSquad={setSquad} inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
+      case 'UPGRADE':
+        return <UpgradeScreen inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
+      case 'TRAIN':
+        return <TrainScreen inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
+      case 'MARKET':
+        return <TransferMarketScreen coins={coins} onBuy={(player, cost) => { setCoins(c => c - cost); setInventory(inv => [...inv, player]); }} />;
+      case 'MATCH':
+        return <MatchScreen squad={squad} onFinish={handleMatchFinish} opponentName={leagueOpponent || undefined} forcedDifficulty={leagueOpponent ? leagueDifficulty : undefined} userTeamName={teamName} />;
+      case 'ONLINE':
+        return <OnlineScreen username={username!} squad={squad} onMatchComplete={handleMatchFinish} />;
+      case 'WORLDCUP':
+        return <WorldCupScreen onBack={() => setActiveTab('HOME')} onWin={() => { addNews('World Cup Glory!', `${teamName} has won the World Cup after a thrilling final!`, 'ACHIEVEMENT'); setTrophies(prev => [...prev, 'World Cup']); }} onMatchComplete={(c, xp, scoreA, scoreB, round) => {
+          setCoins(prev => prev + c);
+          setInventory(prev => prev.map(p => xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p));
+          setSquad(prev => ({ ...prev, lineup: prev.lineup.map(p => p && xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p) }));
+          if (round && ['R16', 'QF', 'SF', 'FINAL'].includes(round)) {
+            setLastMatchResult({ score: `${scoreA}-${scoreB}`, opponent: 'World Cup Opponent', isWinner: (scoreA || 0) > (scoreB || 0), competition: `World Cup ${round}`, returnTab: 'WORLDCUP' });
+            setActiveTab('INTERVIEW');
+          }
+        }} />;
+      case 'PRACTICE':
+        return <PracticeScreen squad={squad} onBack={() => setActiveTab('HOME')} />;
+      case 'LEAGUE':
+        return <LeagueScreen teamName={teamName} onBack={() => setActiveTab('HOME')} onStartMatch={(opponent, diff) => { setLeagueOpponent(opponent); setLeagueDifficulty(diff); setActiveTab('MATCH'); }} />;
+      case 'NEWS':
+        return <NewsScreen onBack={() => setActiveTab('HOME')} />;
+      case 'INTERVIEW':
+        return <InterviewScreen matchResult={{ score: lastMatchResult?.score || '0-0', opponent: lastMatchResult?.opponent || 'Opponent', competition: lastMatchResult?.competition || 'Post Match', isWinner: Boolean(lastMatchResult?.isWinner), playerPerformance: 'Đội bóng duy trì nhịp độ tốt và tạo ra nhiều khoảnh khắc đáng chú ý.' }} onFinish={(summary) => {
+          if (summary) addNews('Manager Speaks Out', summary, 'INTERVIEW');
+          setLeagueOpponent(null);
+          setActiveTab(lastMatchResult?.returnTab || 'HOME');
+        }} />;
+      case 'HOME':
+      default:
+        return (
+          <div className="p-4 md:p-6 xl:p-8 overflow-y-auto">
+            <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+              <section className="hero-shell p-6 md:p-8 xl:p-10">
+                <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6 items-stretch">
+                  <div className="space-y-5">
+                    <div className="ui-kicker">Ultimate football club</div>
+                    <h1 className="text-4xl md:text-6xl font-black leading-none tracking-tight max-w-3xl">
+                      Xây dựng đội bóng theo phong cách <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-cyan-300">console football</span> với giao diện hiện đại hơn.
+                    </h1>
+                    <p className="text-zinc-300 max-w-2xl text-sm md:text-base leading-7">
+                      Mình đã đẩy phần giao diện theo hướng đậm chất game bóng đá: dashboard dạng thẻ, chỉ số đội hình rõ hơn, cảm giác menu hiện đại hơn và sẵn sàng cho cả PC lẫn mobile.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      <button onClick={() => setActiveTab('MATCH')} className="primary-cta">
+                        <Play className="w-5 h-5" />
+                        Vào trận ngay
+                      </button>
+                      <button onClick={() => setActiveTab('SQUAD')} className="secondary-cta">
+                        <Users className="w-5 h-5" />
+                        Chỉnh đội hình
+                      </button>
+                    </div>
+                    <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                      <div className="stat-chip"><span>Team OVR</span><strong>{teamOvr}</strong></div>
+                      <div className="stat-chip"><span>Attack</span><strong>{attackScore}</strong></div>
+                      <div className="stat-chip"><span>Balance</span><strong>{balanceScore}</strong></div>
+                    </div>
+                  </div>
+                  <div className="glass-panel p-5 md:p-6 flex flex-col justify-between">
+                    <div>
+                      <div className="ui-kicker mb-3">Club snapshot</div>
+                      <div className="flex items-center gap-4">
+                        <img src={teamLogo} alt={teamName} className="w-16 h-16 rounded-2xl border border-white/15 object-cover" />
+                        <div>
+                          <div className="text-2xl font-black">{teamName}</div>
+                          <div className="text-zinc-400 text-sm">Manager: {username}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-5">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="text-zinc-400 text-xs uppercase tracking-[0.2em]">Formation</div>
+                        <div className="text-2xl font-black mt-2">{squad.formation}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="text-zinc-400 text-xs uppercase tracking-[0.2em]">Trophies</div>
+                        <div className="text-2xl font-black mt-2">{trophies.length}</div>
+                      </div>
+                    </div>
+                    <div className="mt-5 rounded-2xl border border-emerald-400/15 bg-emerald-500/10 p-4 text-sm text-emerald-100 leading-6">
+                      PC: dùng <strong>WASD</strong> để di chuyển, <strong>S</strong> để sút, <strong>C</strong> để chuyền, <strong>Shift</strong> để tăng tốc. Mobile có joystick và phím nổi ngay trên sân.
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid xl:grid-cols-[1.15fr_0.85fr] gap-6">
+                <div className="space-y-6">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {quickModes.map((mode) => {
+                      const Icon = mode.icon;
+                      return (
+                        <button key={mode.key} onClick={() => setActiveTab(mode.key)} className={`mode-card bg-gradient-to-br ${mode.accent}`}>
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="ui-kicker mb-2">Game mode</div>
+                              <h3 className="text-2xl font-black">{mode.title}</h3>
+                              <p className="text-zinc-300 text-sm mt-2 leading-6">{mode.description}</p>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl border border-white/15 bg-white/10 flex items-center justify-center shrink-0">
+                              <Icon className="w-6 h-6" />
+                            </div>
+                          </div>
+                          <div className="inline-flex items-center gap-2 text-emerald-300 text-sm font-semibold mt-6">Mở chế độ <ChevronRight className="w-4 h-4" /></div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {[
+                      ['SQUAD', 'Đội hình', 'Sắp xếp XI chính, thay người, cân đội hình.', Users],
+                      ['STORE', 'Store', 'Mở pack và tìm cầu thủ chất lượng cao.', ShoppingBag],
+                      ['MARKET', 'Market', 'Săn cầu thủ phù hợp chiến thuật đội bóng.', Globe],
+                      ['UPGRADE', 'Upgrade', 'Nâng cấp thẻ, tăng độ bá của đội hình.', Zap],
+                      ['TRAIN', 'Training', 'Rèn stat theo mục tiêu rõ ràng hơn.', Dumbbell],
+                      ['NEWS', 'News', 'Theo dõi tin tức và thành tích gần đây.', Newspaper],
+                    ].map(([tab, title, desc, Icon]: any) => (
+                      <button key={tab} onClick={() => setActiveTab(tab)} className="glass-panel p-5 text-left hover:-translate-y-0.5 transition-transform">
+                        <Icon className="w-7 h-7 text-emerald-300 mb-4" />
+                        <h3 className="text-xl font-black">{title}</h3>
+                        <p className="text-sm text-zinc-400 mt-2 leading-6">{desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <DailyChest onClaim={(rewardCoins, rewardPlayer) => { setCoins(c => c + rewardCoins); setInventory(inv => [...inv, rewardPlayer]); }} />
+                  <div className="glass-panel p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-400/20 flex items-center justify-center"><Gamepad2 className="w-5 h-5 text-cyan-300" /></div>
+                      <div>
+                        <div className="ui-kicker">Gameplay direction</div>
+                        <h3 className="text-xl font-black">Tối ưu PC & Mobile</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-3 text-sm text-zinc-300 leading-7">
+                      <p>Điều khiển bàn phím đã giữ kiểu arcade rõ ràng hơn, trong khi mobile dùng joystick ảo và nút hành động lớn để thao tác dễ hơn.</p>
+                      <p>Toàn bộ menu, header, dashboard và thẻ cầu thủ đã được làm lại theo hướng đậm chất game bóng đá online hiện đại.</p>
+                    </div>
+                  </div>
+                  <div className="glass-panel p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-2xl bg-yellow-500/10 border border-yellow-400/20 flex items-center justify-center"><Sparkles className="w-5 h-5 text-yellow-300" /></div>
+                      <div>
+                        <div className="ui-kicker">Visual refresh</div>
+                        <h3 className="text-xl font-black">Đồ họa giao diện mới</h3>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="stat-chip"><span>Menu</span><strong>Glass UI</strong></div>
+                      <div className="stat-chip"><span>Cards</span><strong>Player Photos</strong></div>
+                      <div className="stat-chip"><span>Pitch</span><strong>Mobile HUD</strong></div>
+                      <div className="stat-chip"><span>UX</span><strong>Responsive</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
-            {trophies.length > 0 && (
-              <div className="flex gap-0.5">
-                {trophies.slice(0, 3).map((_, i) => <span key={i} className="text-base">🏆</span>)}
+          </div>
+        );
+    }
+  };
+
+  const isMatchTab = ['MATCH', 'WORLDCUP', 'ONLINE', 'PRACTICE', 'TRAIN'].includes(activeTab);
+
+  if (!username) {
+    return (
+      <div className={`min-h-screen text-white flex items-center justify-center p-4 ${getBackgroundClass()}`}>
+        <div className="w-full max-w-5xl grid lg:grid-cols-[1.05fr_0.95fr] rounded-[28px] overflow-hidden border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.45)]">
+          <div className="p-8 md:p-12 bg-[linear-gradient(180deg,rgba(5,10,15,0.55),rgba(5,10,15,0.88))] backdrop-blur-md">
+            <div className="ui-kicker mb-4">Next-gen football experience</div>
+            <h1 className="text-4xl md:text-6xl font-black leading-none tracking-tight max-w-xl">Khởi đầu sự nghiệp HLV với giao diện bóng đá hiện đại hơn.</h1>
+            <p className="text-zinc-300 mt-5 max-w-xl leading-7">
+              Giao diện đăng nhập được làm lại theo phong cách sân vận động ban đêm, nhấn mạnh cảm giác premium và gần hơn với các game bóng đá online hiện đại.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-3 mt-8">
+              <div className="stat-chip"><span>UI</span><strong>Stadium Intro</strong></div>
+              <div className="stat-chip"><span>Controls</span><strong>PC + Mobile</strong></div>
+              <div className="stat-chip"><span>Cards</span><strong>Photo Ready</strong></div>
+            </div>
+          </div>
+          <div className="p-8 md:p-10 bg-zinc-950/90 backdrop-blur-xl">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-400/20 flex items-center justify-center">
+                <Shield className="w-8 h-8 text-emerald-300" />
               </div>
-            )}
-          </button>
-
-          {/* Center: Main nav tabs */}
-          <nav className="hidden md:flex items-center gap-1">
-            {[
-              { id: 'HOME', label: 'Home', icon: '🏠' },
-              { id: 'MATCH', label: 'Trận', icon: '⚽' },
-              { id: 'SQUAD', label: 'Đội', icon: '👥' },
-              { id: 'STORE', label: 'Cửa Hàng', icon: '🛍️' },
-              { id: 'LEAGUE', label: 'Giải Đấu', icon: '🏆' },
-            ].map(item => (
-              <button key={item.id} onClick={() => setActiveTab(item.id as Tab)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all
-                  ${activeTab === item.id ? 'bg-[#0b5fce]/30 text-[#0b8fff]' : 'text-white/50 hover:text-white/80 hover:bg-white/5'}`}
-                style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-                {item.label}
+              <div>
+                <div className="ui-kicker">Club access</div>
+                <div className="text-3xl font-black">Ultimate Club</div>
+              </div>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input type="text" name="username" placeholder="Tên HLV" required className="auth-input" />
+              <input type="text" name="teamName" placeholder="Tên CLB" required className="auth-input" />
+              <button type="submit" className="primary-cta w-full justify-center py-4 text-base">
+                <Play className="w-5 h-5" />
+                Bắt đầu sự nghiệp
               </button>
-            ))}
-          </nav>
-
-          {/* Right: Coins + controls */}
-          <div className="flex items-center gap-2">
-            {/* Gems */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#7c3aed]/40 bg-[#7c3aed]/10">
-              <span className="text-sm">💎</span>
-              <span className="font-black text-sm text-[#a78bfa]" style={{ fontFamily: "'Bebas Neue'" }}>{gems.toLocaleString()}</span>
+            </form>
+            <div className="mt-6 text-sm text-zinc-400 leading-6">
+              Mục tiêu lần chỉnh này là tạo phiên bản mang cảm giác gần với game bóng đá online nổi tiếng ở phần bố cục, nhịp điều hướng và độ bóng bẩy của UI, nhưng vẫn giữ tài nguyên an toàn để bạn tiếp tục phát triển.
             </div>
-            {/* Coins */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#e8b84b]/40 bg-[#e8b84b]/10">
-              <span className="text-sm">🪙</span>
-              <span className="font-black text-sm text-[#e8b84b]" style={{ fontFamily: "'Bebas Neue'" }}>{coins.toLocaleString()}</span>
-            </div>
-            {/* Mute */}
-            <button onClick={() => { setMuted(m => !m); setVolume(muted ? 0.3 : 0); }}
-              className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-sm transition-all">
-              {muted ? '🔇' : '🔊'}
-            </button>
-            {/* Logout */}
-            <button onClick={handleLogout}
-              className="w-8 h-8 rounded-full bg-white/5 hover:bg-red-500/20 flex items-center justify-center text-sm transition-all">
-              🚪
-            </button>
-          </div>
-        </header>
-      )}
-
-      {/* ── Content ── */}
-      <main className="flex-1 overflow-hidden relative">
-        {renderContent()}
-      </main>
-
-      {/* ── Mobile Bottom Nav ── */}
-      {!isMatchActive && (
-        <nav className="md:hidden fc-header flex items-center justify-around px-2 py-1.5 shrink-0 z-50">
-          {[
-            { id: 'HOME', label: 'Home', e: '🏠' },
-            { id: 'MATCH', label: 'Trận', e: '⚽' },
-            { id: 'SQUAD', label: 'Đội', e: '👥' },
-            { id: 'STORE', label: 'Shop', e: '🛍️' },
-            { id: 'LEAGUE', label: 'Giải', e: '🏆' },
-            { id: 'NEWS', label: 'Tin', e: '📰' },
-          ].map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id as Tab)}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all
-                ${activeTab === item.id ? 'text-[#0b8fff] bg-[#0b5fce]/20' : 'text-white/40'}`}>
-              <span className="text-xl">{item.e}</span>
-              <span className="text-[9px] font-black tracking-widest" style={{ fontFamily: "'Rajdhani'" }}>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-      )}
-
-      {/* Coins anim */}
-      {showCoinsAnim && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[999] pointer-events-none text-2xl font-black text-[#e8b84b] animate-bounce" style={{ fontFamily: "'Bebas Neue'" }}>
-          +COINS! 🪙
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Home Screen Component
-function HomeScreen({ username, teamName, teamLogo, coins, gems, trophies, onNavigate, onClaim }: {
-  username: string; teamName: string; teamLogo: string; coins: number; gems: number;
-  trophies: string[]; onNavigate: (tab: Tab) => void; onClaim: (coins: number, player: Player) => void;
-}) {
-  return (
-    <div className="h-full overflow-y-auto fc-home-bg" style={{ paddingBottom: '4rem' }}>
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Welcome banner */}
-        <div className="mb-6 relative overflow-hidden rounded-2xl p-6 border border-[#0b5fce]/30"
-          style={{ background: 'linear-gradient(135deg, rgba(11,95,206,0.2) 0%, rgba(5,8,15,0.8) 100%)' }}>
-          <div className="absolute inset-0 opacity-10"
-            style={{ backgroundImage: "url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=800&auto=format')", backgroundSize: 'cover', backgroundPosition: 'center' }} />
-          <div className="relative z-10 flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-[#0b8fff] uppercase tracking-widest mb-1">Chào mừng trở lại,</div>
-              <div className="text-4xl font-black text-white" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 4 }}>{username.toUpperCase()}</div>
-              <div className="text-sm text-white/60 font-medium mt-1">{teamName}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-6xl">⚽</div>
-              {trophies.length > 0 && <div className="text-sm text-[#e8b84b] font-bold mt-1">{trophies.length} Trophy</div>}
-            </div>
-          </div>
-        </div>
-
-        {/* Daily chest */}
-        <div className="mb-6">
-          <DailyChest onClaim={onClaim} />
-        </div>
-
-        {/* Main game modes */}
-        <div className="mb-4">
-          <h2 className="text-sm font-black text-white/50 uppercase tracking-widest mb-3" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 4 }}>Chế Độ Chơi</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <HomeCard icon="⚽" title="Thi Đấu" desc="Trận đấu 11vs11 với AI" color="#0b8fff" onClick={() => onNavigate('MATCH')} />
-            <HomeCard icon="🌐" title="Online PvP" desc="Đấu với người chơi khác" color="#00c851" onClick={() => onNavigate('ONLINE')} />
-            <HomeCard icon="🏆" title="Champions League" desc="Chinh phục bảng xếp hạng" color="#e8b84b" onClick={() => onNavigate('LEAGUE')} />
-            <HomeCard icon="🌍" title="World Cup" desc="Dẫn dắt đội tuyển quốc gia" color="#f5d57a" onClick={() => onNavigate('WORLDCUP')} />
-          </div>
-        </div>
-
-        {/* Team management */}
-        <div className="mb-4">
-          <h2 className="text-sm font-black text-white/50 uppercase tracking-widest mb-3" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 4 }}>Quản Lý Đội Bóng</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <HomeCard icon="👥" title="Đội Hình" desc="Sắp xếp chiến thuật" color="#0b8fff" onClick={() => onNavigate('SQUAD')} />
-            <HomeCard icon="🛍️" title="Cửa Hàng" desc="Mở pack nhận cầu thủ mới" color="#a78bfa" onClick={() => onNavigate('STORE')} />
-            <HomeCard icon="🔄" title="Chợ Chuyển Nhượng" desc="Mua bán cầu thủ" color="#0b8fff" onClick={() => onNavigate('MARKET')} />
-            <HomeCard icon="⚡" title="Nâng Cấp" desc="Tăng chỉ số cầu thủ" color="#e8b84b" onClick={() => onNavigate('UPGRADE')} />
-          </div>
-        </div>
-
-        {/* Extra */}
-        <div>
-          <h2 className="text-sm font-black text-white/50 uppercase tracking-widest mb-3" style={{ fontFamily: "'Bebas Neue'", letterSpacing: 4 }}>Khác</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <HomeCard icon="🏋️" title="Tập Luyện" desc="Nâng cao kỹ năng cầu thủ" color="#00c851" onClick={() => onNavigate('TRAIN')} />
-            <HomeCard icon="🎯" title="Chế Độ Luyện Tập" desc="Sút phạt, rê bóng, chuyền bóng" color="#00c851" onClick={() => onNavigate('PRACTICE')} />
-            <HomeCard icon="📰" title="Tin Tức" desc="Cập nhật bóng đá mới nhất" color="#0b8fff" onClick={() => onNavigate('NEWS')} />
-            <HomeCard icon="📖" title="Hướng Dẫn" desc="Học cách chơi cơ bản" color="#a78bfa" onClick={() => onNavigate('TUTORIAL')} />
           </div>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen text-white font-sans flex flex-col ${getBackgroundClass()}`}>
+      <header className={`h-16 md:h-20 border-b border-white/10 bg-zinc-950/70 backdrop-blur-xl flex items-center justify-between px-4 md:px-6 shrink-0 z-50 ${isMatchTab ? 'hidden md:flex' : 'flex'}`}>
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('HOME')}>
+          <img src={teamLogo} alt="Team Logo" className="w-10 h-10 rounded-2xl border border-white/10 object-cover" />
+          <div>
+            <div className="text-lg md:text-xl font-black tracking-tight">{teamName}</div>
+            <div className="text-xs text-zinc-400">OVR {teamOvr} · {squad.formation}</div>
+          </div>
+          {trophies.length > 0 && <div className="hidden md:flex items-center ml-3 gap-1">{trophies.map((_, i) => <Trophy key={i} className="w-4 h-4 text-yellow-400" />)}</div>}
+        </div>
+        <div className="flex items-center gap-2 md:gap-4">
+          <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold">
+            <span className="text-yellow-300">🪙</span>{coins.toLocaleString()}
+          </div>
+          <button onClick={toggleMute} className="icon-btn" title={volume > 0 ? 'Mute' : 'Unmute'}>{volume > 0 ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}</button>
+          <button onClick={() => setActiveTab('HOME')} className="icon-btn"><Home className="w-5 h-5" /></button>
+          <button onClick={handleLogout} className="icon-btn"><LogOut className="w-5 h-5" /></button>
+        </div>
+      </header>
+      <main className="flex-1 min-h-0">{renderTab()}</main>
     </div>
   );
 }

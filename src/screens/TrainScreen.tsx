@@ -1,235 +1,138 @@
 import React, { useState, useEffect } from 'react';
 import { Player, PlayerStats } from '../types';
 import PlayerCard from '../components/PlayerCard';
-import { Dumbbell, Clock, ArrowUpRight, CheckCircle2, Zap } from 'lucide-react';
 
-interface Props {
-  inventory: Player[];
-  setInventory: React.Dispatch<React.SetStateAction<Player[]>>;
-  coins: number;
-  setCoins: React.Dispatch<React.SetStateAction<number>>;
-}
+interface Props { inventory:Player[]; setInventory:React.Dispatch<React.SetStateAction<Player[]>>; coins:number; setCoins:React.Dispatch<React.SetStateAction<number>>; }
 
-export default function TrainScreen({ inventory, setInventory, coins, setCoins }: Props) {
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+const STAT_META:{key:keyof PlayerStats;label:string;icon:string;time:number;cost:number}[]=[
+  {key:'pac',label:'Tốc độ',icon:'⚡',time:30,cost:50},
+  {key:'sho',label:'Sút',icon:'🎯',time:45,cost:80},
+  {key:'pas',label:'Chuyền',icon:'🅿️',time:35,cost:60},
+  {key:'dri',label:'Rê bóng',icon:'🏃',time:40,cost:70},
+  {key:'def',label:'Phòng thủ',icon:'🛡️',time:50,cost:90},
+  {key:'phy',label:'Thể lực',icon:'💪',time:55,cost:100},
+];
 
-  useEffect(() => {
-    const interval = setInterval(() => {
+function rarColor(r:string){ return({SUPER_LEGENDARY:'#b060ff',GOLD:'#ffcd3c',SILVER:'#a0b0c0',BRONZE:'#c08040'})[r]||'#888'; }
+
+export default function TrainScreen({inventory,setInventory,coins,setCoins}:Props){
+  const [sel,setSel]=useState<Player|null>(null);
+  const [now,setNow]=useState(Date.now());
+  const [search,setSearch]=useState('');
+
+  useEffect(()=>{
+    const iv=setInterval(()=>{
       setNow(Date.now());
-      
-      // Check for completed training
-      setInventory(prev => {
-        let changed = false;
-        const newInventory = prev.map(p => {
-          if (p.training && p.training.endTime <= Date.now()) {
-            changed = true;
-            const statToUpgrade = p.training.stat;
-            return {
-              ...p,
-              stats: {
-                ...p.stats,
-                [statToUpgrade]: Math.min(99, p.stats[statToUpgrade] + 1)
-              },
-              ovr: Math.min(99, p.ovr + 1), // simplified OVR increase
-              training: undefined
-            };
+      setInventory(prev=>{
+        let changed=false;
+        const next=prev.map(p=>{
+          if(p.training&&p.training.endTime<=Date.now()){
+            changed=true;
+            const s=p.training.stat;
+            return{...p,stats:{...p.stats,[s]:Math.min(99,p.stats[s]+1)},training:undefined};
           }
           return p;
         });
-        return changed ? newInventory : prev;
+        if(changed&&sel){ const updated=next.find(p=>p.id===sel.id); if(updated)setSel(updated); }
+        return changed?next:prev;
       });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [setInventory]);
+    },1000);
+    return()=>clearInterval(iv);
+  },[]);
 
-  const selectedPlayer = inventory.find(p => p.id === selectedPlayerId);
-
-  const getTrainingCost = (currentStat: number) => {
-    return Math.floor(currentStat * 5); // Example: stat 80 costs 400 coins
+  const startTrain=(stat:keyof PlayerStats,time:number,cost:number)=>{
+    if(!sel||coins<cost)return;
+    if(sel.training)return;
+    setCoins(c=>c-cost);
+    const end=Date.now()+time*1000;
+    const updated={...sel,training:{stat,endTime:end}};
+    setInventory(prev=>prev.map(p=>p.id===sel.id?updated:p));
+    setSel(updated);
   };
 
-  const startTraining = (stat: keyof PlayerStats) => {
-    if (!selectedPlayer || selectedPlayer.training) return;
-    
-    const currentStat = selectedPlayer.stats[stat];
-    if (currentStat >= 99) return;
-    
-    const cost = getTrainingCost(currentStat);
-    if (coins < cost) {
-      return;
-    }
-
-    setCoins(c => c - cost);
-
-    // Training time: 10 seconds per stat point
-    const durationMs = currentStat * 10 * 1000;
-    const endTime = Date.now() + durationMs;
-
-    setInventory(prev => prev.map(p => 
-      p.id === selectedPlayer.id 
-        ? { ...p, training: { stat, endTime } }
-        : p
-    ));
-  };
-
-  const getSpeedUpCost = (endTime: number) => {
-    const remainingMs = Math.max(0, endTime - Date.now());
-    const remainingSeconds = Math.ceil(remainingMs / 1000);
-    return Math.max(10, Math.floor(remainingSeconds * 2)); // 2 coins per second remaining
-  };
-
-  const speedUpTraining = () => {
-    if (!selectedPlayer || !selectedPlayer.training) return;
-    
-    const cost = getSpeedUpCost(selectedPlayer.training.endTime);
-    if (coins < cost) {
-      return;
-    }
-
-    setCoins(c => c - cost);
-    
-    // Finish immediately
-    setInventory(prev => prev.map(p => {
-      if (p.id === selectedPlayer.id && p.training) {
-        const statToUpgrade = p.training.stat;
-        return {
-          ...p,
-          stats: {
-            ...p.stats,
-            [statToUpgrade]: Math.min(99, p.stats[statToUpgrade] + 1)
-          },
-          ovr: Math.min(99, p.ovr + 1),
-          training: undefined
-        };
-      }
-      return p;
-    }));
-  };
-
-  const formatTime = (ms: number) => {
-    if (ms <= 0) return '00:00';
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
+  const filtered=inventory.filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="h-full flex flex-col md:flex-row bg-transparent p-4 md:p-8 gap-8 overflow-y-auto">
-      {/* Left: Player Selection */}
-      <div className="w-full md:w-1/3 flex flex-col bg-zinc-900/60 backdrop-blur-md border border-zinc-800 rounded-2xl p-6">
-        <div className="flex items-center space-x-3 mb-6">
-          <Dumbbell className="w-8 h-8 text-emerald-500" />
-          <h2 className="text-2xl font-black italic">TRAINING CENTER</h2>
+    <div style={{height:'100%',display:'flex',background:'#05080f',overflow:'hidden',fontFamily:"'Exo 2',sans-serif"}}>
+      {/* Left: player list */}
+      <div style={{width:300,background:'rgba(5,11,26,0.97)',borderRight:'1px solid rgba(0,180,255,0.12)',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'14px 16px',borderBottom:'1px solid rgba(0,180,255,0.1)'}}>
+          <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:16,letterSpacing:3,marginBottom:10}}>🏋️ TRUNG TÂM LUYỆN TẬP</div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Tìm kiếm..." style={{width:'100%',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(0,180,255,0.2)',borderRadius:8,padding:'8px 12px',color:'white',fontSize:13,fontWeight:600,outline:'none',boxSizing:'border-box'}} />
         </div>
-        
-        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-          {inventory.map(player => (
-            <div 
-              key={player.id}
-              onClick={() => setSelectedPlayerId(player.id)}
-              className={`flex items-center p-3 rounded-xl cursor-pointer transition-colors border ${
-                selectedPlayerId === player.id 
-                  ? 'bg-emerald-900/30 border-emerald-500' 
-                  : 'bg-zinc-950 border-zinc-800 hover:border-zinc-600'
-              }`}
-            >
-              <div className="w-12 h-12 bg-zinc-800 rounded-full overflow-hidden mr-4 border border-zinc-700">
-                {player.image && <img src={player.image} alt={player.name} className="w-full h-full object-cover" />}
-              </div>
-              <div className="flex-1">
-                <div className="font-bold text-white">{player.name}</div>
-                <div className="text-xs text-zinc-400 font-mono">OVR {player.ovr} | {player.position}</div>
-              </div>
-              {player.training && (
-                <div className="flex items-center text-emerald-400 text-xs font-bold bg-emerald-900/50 px-2 py-1 rounded">
-                  <Clock className="w-3 h-3 mr-1" />
-                  TRAINING
+        <div style={{flex:1,overflowY:'auto',padding:'8px'}}>
+          {filtered.map(p=>{
+            const isTraining=!!p.training;
+            const remaining=p.training?Math.max(0,Math.ceil((p.training.endTime-now)/1000)):0;
+            return(
+              <div key={p.id} onClick={()=>{setSel(p);}} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:4,cursor:'pointer',border:`1px solid ${sel?.id===p.id?'rgba(0,180,255,0.4)':'rgba(255,255,255,0.06)'}`,background:sel?.id===p.id?'rgba(0,180,255,0.08)':'rgba(255,255,255,0.02)',transition:'all 0.15s'}}>
+                <div style={{width:40,height:40,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:900,color:rarColor(p.rarity),background:`${rarColor(p.rarity)}18`,border:`1px solid ${rarColor(p.rarity)}33`,fontFamily:"'Oxanium',sans-serif",flexShrink:0}}>{p.ovr}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:800,fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</div>
+                  <div style={{fontSize:10,color:isTraining?'#00e676':'rgba(255,255,255,0.4)',fontWeight:700}}>
+                    {isTraining?`⏳ ${remaining}s còn lại`:`${p.position} · Lv${p.level}`}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+                {isTraining&&<div style={{width:8,height:8,borderRadius:'50%',background:'#00e676',animation:'pulse 1s ease-in-out infinite'}} />}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Right: Training Details */}
-      <div className="w-full md:w-2/3 flex flex-col items-center justify-center bg-zinc-900/60 backdrop-blur-md border border-zinc-800 rounded-2xl p-6 relative overflow-hidden">
-        {!selectedPlayer ? (
-          <div className="text-zinc-500 flex flex-col items-center">
-            <Dumbbell className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-xl font-medium">Select a player to train</p>
+      {/* Right: train options */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,overflowY:'auto'}}>
+        {!sel?(
+          <div style={{textAlign:'center',color:'rgba(255,255,255,0.3)'}}>
+            <div style={{fontSize:64,marginBottom:16}}>🏋️</div>
+            <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:22,letterSpacing:3,marginBottom:8}}>TRUNG TÂM LUYỆN TẬP</div>
+            <div style={{fontSize:14,fontWeight:600}}>Chọn một cầu thủ để bắt đầu luyện tập</div>
           </div>
-        ) : (
-          <div className="w-full max-w-2xl flex flex-col items-center">
-            <PlayerCard player={selectedPlayer} size="lg" className="mb-8" />
-            
-            {selectedPlayer.training ? (
-              <div className="w-full bg-zinc-950 border border-emerald-500/50 rounded-2xl p-8 text-center relative overflow-hidden flex flex-col items-center">
-                <div className="absolute inset-0 bg-emerald-500/10 animate-pulse" />
-                <h3 className="text-2xl font-black italic text-emerald-400 mb-2 relative z-10">TRAINING IN PROGRESS</h3>
-                <p className="text-zinc-400 mb-6 relative z-10">
-                  Improving <span className="text-white font-bold uppercase">{selectedPlayer.training.stat}</span>
-                </p>
-                
-                <div className="flex flex-col items-center relative z-10 mb-6">
-                  <div className="text-5xl font-mono font-bold text-white mb-2">
-                    {formatTime(selectedPlayer.training.endTime - now)}
-                  </div>
-                  <p className="text-sm text-zinc-500">Time remaining</p>
+        ):(
+          <div style={{width:'100%',maxWidth:600,display:'flex',flexDirection:'column',gap:20,alignItems:'center'}}>
+            <PlayerCard player={sel} size="lg" />
+            {sel.training?(
+              <div style={{width:'100%',background:'rgba(0,200,80,0.08)',border:'1px solid rgba(0,200,80,0.3)',borderRadius:12,padding:'20px',textAlign:'center'}}>
+                <div style={{fontSize:14,fontWeight:700,color:'rgba(255,255,255,0.6)',marginBottom:8}}>Đang luyện tập</div>
+                <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:32,color:'#00e676',marginBottom:8}}>
+                  ⏳ {Math.max(0,Math.ceil((sel.training.endTime-now)/1000))}s
                 </div>
-
-                <button 
-                  onClick={speedUpTraining}
-                  className="relative z-10 px-6 py-3 bg-yellow-500 text-black font-bold rounded-full hover:bg-yellow-400 transition-colors flex items-center space-x-2"
-                >
-                  <Zap className="w-5 h-5" />
-                  <span>SPEED UP</span>
-                  <span className="text-black/50">|</span>
-                  <span className="font-mono">{getSpeedUpCost(selectedPlayer.training.endTime)} C</span>
-                </button>
+                <div style={{fontSize:13,color:'rgba(255,255,255,0.5)'}}>
+                  Chỉ số <b style={{color:'#00e676'}}>{STAT_META.find(s=>s.key===sel.training!.stat)?.label}</b> sẽ tăng 1 khi xong
+                </div>
+                <div style={{marginTop:12,height:6,background:'rgba(255,255,255,0.1)',borderRadius:99,overflow:'hidden'}}>
+                  <div style={{height:'100%',borderRadius:99,background:'linear-gradient(90deg,#00b4ff,#00e676)',width:`${Math.max(0,100-((sel.training.endTime-now)/((STAT_META.find(s=>s.key===sel.training!.stat)?.time||30)*1000))*100)}%`,transition:'width 1s linear'}} />
+                </div>
               </div>
-            ) : (
-              <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-4">
-                {(Object.keys(selectedPlayer.stats) as Array<keyof PlayerStats>).map(stat => {
-                  const val = selectedPlayer.stats[stat];
-                  const isMax = val >= 99;
-                  const durationMs = val * 10 * 1000;
-                  const cost = getTrainingCost(val);
-                  
-                  return (
-                    <button
-                      key={stat}
-                      onClick={() => startTraining(stat)}
-                      disabled={isMax || coins < cost}
-                      className="flex flex-col items-center bg-zinc-950 border border-zinc-800 p-4 rounded-xl hover:border-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden"
-                    >
-                      <div className="text-lg font-black text-zinc-400 group-hover:text-white transition-colors uppercase mb-2">{stat}</div>
-                      <div className="text-3xl font-bold text-white mb-2">{val}</div>
-                      
-                      {isMax ? (
-                        <div className="flex items-center text-emerald-500 text-sm font-bold mt-2">
-                          <CheckCircle2 className="w-4 h-4 mr-1" /> MAX
-                        </div>
-                      ) : (
-                        <div className="w-full flex flex-col mt-2 pt-2 border-t border-zinc-800 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center text-emerald-400 text-sm font-bold">
-                              <ArrowUpRight className="w-4 h-4 mr-1" /> +1
-                            </div>
-                            <div className="flex items-center text-zinc-400 text-sm font-mono">
-                              <Clock className="w-3 h-3 mr-1" />
-                              {formatTime(durationMs)}
-                            </div>
+            ):(
+              <div style={{width:'100%'}}>
+                <div style={{fontSize:11,fontWeight:700,color:'rgba(0,180,255,0.7)',letterSpacing:'0.3em',marginBottom:12,textAlign:'center'}}>CHỌN CHỈ SỐ ĐỂ LUYỆN TẬP</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                  {STAT_META.map(sm=>{
+                    const canTrain=coins>=sm.cost;
+                    const curVal=sel.stats[sm.key];
+                    return(
+                      <button key={sm.key} onClick={()=>startTrain(sm.key,sm.time,sm.cost)} disabled={!canTrain||curVal>=99} style={{padding:'14px 16px',borderRadius:10,background:canTrain&&curVal<99?'rgba(0,180,255,0.08)':'rgba(255,255,255,0.03)',border:`1px solid ${canTrain&&curVal<99?'rgba(0,180,255,0.3)':'rgba(255,255,255,0.07)'}`,cursor:canTrain&&curVal<99?'pointer':'not-allowed',transition:'all 0.15s',textAlign:'left',display:'flex',flexDirection:'column',gap:6}}
+                        onMouseEnter={e=>{if(canTrain&&curVal<99)(e.currentTarget as HTMLElement).style.background='rgba(0,180,255,0.15)';}}
+                        onMouseLeave={e=>{if(canTrain&&curVal<99)(e.currentTarget as HTMLElement).style.background='rgba(0,180,255,0.08)';}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6}}>
+                            <span style={{fontSize:20}}>{sm.icon}</span>
+                            <span style={{fontWeight:800,fontSize:13,color:canTrain?'white':'rgba(255,255,255,0.4)'}}>{sm.label}</span>
                           </div>
-                          <div className="flex items-center justify-center text-yellow-500 text-sm font-bold mt-1 bg-yellow-500/10 rounded py-1">
-                            {cost} Coins
-                          </div>
+                          <span style={{fontSize:16,fontWeight:900,color:curVal>=90?'#00e676':curVal>=75?'#69f0ae':curVal>=60?'#ffcd3c':'#ff9800',fontFamily:"'Oxanium',sans-serif"}}>{curVal}</span>
                         </div>
-                      )}
-                    </button>
-                  );
-                })}
+                        <div style={{height:4,background:'rgba(255,255,255,0.08)',borderRadius:99,overflow:'hidden'}}>
+                          <div style={{height:'100%',borderRadius:99,width:`${curVal}%`,background:curVal>=90?'#00e676':curVal>=75?'#69f0ae':curVal>=60?'#ffcd3c':'#ff9800'}} />
+                        </div>
+                        <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'rgba(255,255,255,0.45)',fontWeight:700}}>
+                          <span>🪙 {sm.cost} &nbsp;·&nbsp; ⏱ {sm.time}s</span>
+                          <span style={{color:canTrain?'rgba(0,200,100,0.7)':'rgba(255,80,80,0.7)'}}>{canTrain?'+1 sau khi xong':'Không đủ coins'}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

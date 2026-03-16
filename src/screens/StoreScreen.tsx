@@ -1,215 +1,266 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Player } from '../types';
 import { generateRandomPlayer } from '../data/players';
 import PlayerCard from '../components/PlayerCard';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAudio } from '../contexts/AudioContext';
 
-interface Props {
-  coins: number;
-  setCoins: React.Dispatch<React.SetStateAction<number>>;
-  inventory: Player[];
-  setInventory: React.Dispatch<React.SetStateAction<Player[]>>;
-}
+interface Props { coins:number; setCoins:React.Dispatch<React.SetStateAction<number>>; inventory:Player[]; setInventory:React.Dispatch<React.SetStateAction<Player[]>>; }
 
-const PACKS = [
-  { id: 'BRONZE', name: 'BRONZE PACK', cost: 100, color: 'from-amber-700 to-amber-900', shadow: 'rgba(180,83,9,0.3)' },
-  { id: 'SILVER', name: 'SILVER PACK', cost: 500, color: 'from-zinc-300 to-zinc-500', shadow: 'rgba(161,161,170,0.3)' },
-  { id: 'GOLD', name: 'GOLD PACK', cost: 1000, color: 'from-yellow-400 to-yellow-600', shadow: 'rgba(250,204,21,0.3)' },
-  { id: 'SUPER_LEGENDARY', name: 'LEGEND PACK', cost: 5000, color: 'from-purple-600 to-indigo-900', shadow: 'rgba(139,92,246,0.4)' },
-  { id: 'LUCKY', name: 'LUCKY PACK', cost: 777, color: 'from-red-500 via-green-500 to-blue-500', shadow: 'rgba(255,255,255,0.5)' },
+const PACKS=[
+  {id:'BRONZE',          name:'BRONZE PACK',     cost:200,   icon:'🥉', bg:'linear-gradient(155deg,#b07a40,#5a2e10,#2a1008)',  border:'#c08040', glow:'rgba(180,120,60,0.5)',  desc:'OVR 55-72'},
+  {id:'SILVER',          name:'SILVER PACK',     cost:500,   icon:'🥈', bg:'linear-gradient(155deg,#ccdde8,#6688aa,#334455)',  border:'#aabbcc', glow:'rgba(170,200,230,0.4)', desc:'OVR 70-82'},
+  {id:'GOLD',            name:'GOLD PACK',       cost:1200,  icon:'🥇', bg:'linear-gradient(155deg,#ffe066,#cc9900,#6a4800)',  border:'#ffe066', glow:'rgba(255,220,60,0.6)',  desc:'OVR 80-92'},
+  {id:'SUPER_LEGENDARY', name:'LEGEND PACK',     cost:5000,  icon:'💎', bg:'linear-gradient(155deg,#cc66ff,#7700cc,#2a0044)',  border:'#cc66ff', glow:'rgba(200,100,255,0.7)', desc:'OVR 93-99'},
+  {id:'MULTICLASS',      name:'MULTI CLASS',     cost:800,   icon:'🃏', bg:'linear-gradient(155deg,#0088ff,#0044aa,#001144)',  border:'#0099ff', glow:'rgba(0,150,255,0.5)',  desc:'Bộ sưu tập'},
+  {id:'LUCKY',           name:'LUCKY PACK',      cost:777,   icon:'🎰', bg:'linear-gradient(155deg,#ff4488,#cc0044,#440011)',  border:'#ff4488', glow:'rgba(255,60,120,0.5)',  desc:'May mắn x2'},
 ];
 
-export default function StoreScreen({ coins, setCoins, inventory, setInventory }: Props) {
-  const { playAudio, stopAudio } = useAudio();
-  const [opening, setOpening] = useState<string | null>(null);
-  const [revealedPlayer, setRevealedPlayer] = useState<Player | null>(null);
-  const [walkoutStage, setWalkoutStage] = useState<number>(0);
+type Phase='store'|'tunnel'|'reveal';
 
-  useEffect(() => {
-    return () => stopAudio('PACK_OPEN');
-  }, []);
+export default function StoreScreen({coins,setCoins,inventory,setInventory}:Props){
+  const {playAudio,stopAudio}=useAudio();
+  const [phase,setPhase]=useState<Phase>('store');
+  const [curPack,setCurPack]=useState<typeof PACKS[0]|null>(null);
+  const [revPlayer,setRevPlayer]=useState<Player|null>(null);
+  const [tunnelStep,setTunnelStep]=useState(0); // 0=entering, 1=sparks, 2=card
+  const [openCount,setOpenCount]=useState(0);
+  const canvasRef=useRef<HTMLCanvasElement>(null);
+  const animRef=useRef<number>(0);
+  const timeRef=useRef(0);
 
-  const openPack = (pack: typeof PACKS[0]) => {
-    if (coins < pack.cost) return;
+  // Tunnel animation
+  useEffect(()=>{
+    if(phase!=='tunnel') return;
+    const canvas=canvasRef.current; if(!canvas) return;
+    const ctx=canvas.getContext('2d'); if(!ctx) return;
+    canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight;
+    let t=0;
+
+    const drawTunnel=(time:number)=>{
+      const W=canvas.width, H=canvas.height;
+      ctx.clearRect(0,0,W,H);
+      const speed=time*0.0015;
+
+      // Dark bg
+      ctx.fillStyle='#000508'; ctx.fillRect(0,0,W,H);
+
+      // Tunnel lines converging to center
+      const cx=W/2, cy=H/2;
+      const numLines=16;
+      for(let i=0;i<numLines;i++){
+        const angle=(i/numLines)*Math.PI*2;
+        const len=Math.max(W,H);
+        const ex=cx+Math.cos(angle)*len;
+        const ey=cy+Math.sin(angle)*len;
+        // Animate depth
+        const alpha=0.08+0.06*Math.sin(speed*2+i);
+        ctx.strokeStyle=`rgba(180,180,40,${alpha})`;
+        ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey); ctx.stroke();
+      }
+
+      // Rectangular tunnel frames going toward center
+      for(let f=0;f<8;f++){
+        const progress=((speed*0.5+f/8)%1);
+        const size=(1-progress)*Math.min(W,H)*0.9;
+        const alpha=progress*0.6;
+        ctx.strokeStyle=`rgba(200,200,40,${alpha})`;
+        ctx.lineWidth=2;
+        ctx.strokeRect(cx-size/2,cy-size/2,size,size);
+      }
+
+      // Fire particles on sides
+      const numParticles=30;
+      for(let i=0;i<numParticles;i++){
+        const side=i%2===0?1:-1;
+        const px=cx+side*(W*0.38+Math.sin(speed*3+i)*20);
+        const py=H*(0.2+((speed*0.8+i/numParticles)%1)*0.6);
+        const r=3+Math.sin(speed*4+i*1.3)*2;
+        const colors=['rgba(255,100,0,0.8)','rgba(255,200,0,0.7)','rgba(255,50,0,0.6)'];
+        const g=ctx.createRadialGradient(px,py,0,px,py,r*3);
+        g.addColorStop(0,colors[i%3]);
+        g.addColorStop(1,'transparent');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r*3,0,Math.PI*2); ctx.fill();
+      }
+
+      // Center glow
+      const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,80);
+      cg.addColorStop(0,`rgba(255,255,180,${0.12+0.08*Math.sin(speed*3)})`);
+      cg.addColorStop(1,'transparent');
+      ctx.fillStyle=cg; ctx.fillRect(0,0,W,H);
+
+      animRef.current=requestAnimationFrame(drawTunnel);
+    };
+    animRef.current=requestAnimationFrame(drawTunnel);
+    const timer=setTimeout(()=>{
+      cancelAnimationFrame(animRef.current);
+      setPhase('reveal');
+    },2200);
+    return()=>{ cancelAnimationFrame(animRef.current); clearTimeout(timer); };
+  },[phase]);
+
+  const openPack=(pack:typeof PACKS[0])=>{
+    if(coins<pack.cost) return;
     stopAudio('THEME');
-    playAudio('PACK_OPEN');
-    setCoins(c => c - pack.cost);
-    setOpening(pack.id);
-    setRevealedPlayer(null);
-    setWalkoutStage(0);
-    
-    let packType = pack.id;
-    if (pack.id === 'LUCKY') {
-      const rand = Math.random();
-      if (rand < 0.4) packType = 'BRONZE';
-      else if (rand < 0.7) packType = 'SILVER';
-      else if (rand < 0.9) packType = 'GOLD';
-      else packType = 'SUPER_LEGENDARY';
-    }
-    
-    const newPlayer = generateRandomPlayer(packType as any);
-    
-    setTimeout(() => {
-      setRevealedPlayer(newPlayer);
-      setWalkoutStage(1);
-      
-      setTimeout(() => {
-        setWalkoutStage(2);
-        
-        setTimeout(() => {
-          setWalkoutStage(3);
-          setInventory(prev => [...prev, newPlayer]);
-        }, 1500);
-      }, 1500);
-    }, 2000);
+    setCoins(c=>c-pack.cost);
+    setCurPack(pack);
+    let pt=pack.id;
+    if(pt==='LUCKY'){const r=Math.random();if(r<0.35)pt='BRONZE';else if(r<0.65)pt='SILVER';else if(r<0.88)pt='GOLD';else pt='SUPER_LEGENDARY';}
+    if(pt==='MULTICLASS')pt='GOLD';
+    const p=generateRandomPlayer(pt as any);
+    setRevPlayer(p);
+    setInventory(inv=>[...inv,p]);
+    setOpenCount(c=>c+1);
+    setPhase('tunnel');
   };
 
-  const isLegend = revealedPlayer && revealedPlayer.ovr >= 90;
+  const close=()=>{ setPhase('store'); setRevPlayer(null); setCurPack(null); playAudio('THEME',true); };
 
-  return (
-    <div className="absolute inset-0 flex flex-col items-center p-8 overflow-y-auto bg-transparent">
-      {/* Enhanced Background Removed to show global background */}
-      
-      <AnimatePresence mode="wait">
-        {!revealedPlayer && !opening ? (
-          <motion.div 
-            key="store-front"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="flex flex-col items-center w-full max-w-5xl z-10 my-auto"
-          >
-            <h2 className="text-4xl font-black italic mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">STORE</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full pb-8">
-              {PACKS.map(pack => (
-                <div key={pack.id} className="flex flex-col items-center">
-                  <div 
-                    className={`w-56 h-80 bg-gradient-to-br ${pack.color} rounded-2xl shadow-[0_0_30px_${pack.shadow}] border border-white/20 flex items-center justify-center mb-6 relative overflow-hidden group cursor-pointer transition-transform hover:scale-105`}
-                    onClick={() => openPack(pack)}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay" />
-                    <h2 className="text-3xl font-black italic text-white z-10 drop-shadow-lg text-center leading-tight">{pack.name.replace(' ', '\n')}</h2>
-                  </div>
-                  <button 
-                    onClick={() => openPack(pack)}
-                    disabled={coins < pack.cost}
-                    className="px-8 py-4 bg-zinc-800 text-white font-bold rounded-full hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 w-full justify-center border border-zinc-700 hover:border-zinc-500 shadow-lg"
-                  >
-                    <span className="text-lg">BUY</span>
-                    <span className="text-zinc-500">|</span>
-                    <span className="text-yellow-500 font-mono text-lg">{pack.cost} C</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        ) : opening && !revealedPlayer ? (
-          <div className="fixed inset-0 flex items-center justify-center z-[100]">
-            <motion.div 
-              key="opening"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: [0.8, 1.2, 1], opacity: 1, rotateY: [0, 180, 360, 540, 720] }}
-              transition={{ duration: 2, ease: "easeInOut" }}
-              className={`w-64 h-96 bg-gradient-to-br ${PACKS.find(p => p.id === opening)?.color} rounded-2xl shadow-[0_0_100px_${PACKS.find(p => p.id === opening)?.shadow}]`}
-            />
+  const isLegend=revPlayer&&revPlayer.ovr>=93;
+
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:'#05080f',overflow:'hidden',fontFamily:"'Exo 2',sans-serif"}}>
+      {/* ── TUNNEL ANIMATION ── */}
+      {phase==='tunnel'&&(
+        <div style={{position:'fixed',inset:0,zIndex:200,background:'#000'}}>
+          <canvas ref={canvasRef} style={{width:'100%',height:'100%',display:'block'}}/>
+          <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+            <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:32,color:'rgba(255,220,0,0.9)',letterSpacing:6,textShadow:'0 0 30px rgba(255,200,0,0.8)',animation:'pulse 0.4s ease-in-out infinite'}}>ĐANG MỞ...</div>
           </div>
-        ) : revealedPlayer ? (
-          <motion.div 
-            key="revealed"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center w-full h-full fixed inset-0 bg-black/90 backdrop-blur-xl z-[100]"
-          >
-            {/* Fireworks for legends */}
-            {isLegend && walkoutStage === 3 && (
-              <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
-                <div className="absolute w-[800px] h-[800px] bg-yellow-500/20 rounded-full blur-[100px] animate-pulse" />
-                {[...Array(30)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ x: '50vw', y: '100vh', scale: 0 }}
-                    animate={{ 
-                      x: `${Math.random() * 100}vw`, 
-                      y: `${Math.random() * 100}vh`,
-                      scale: [0, Math.random() * 3 + 1, 0],
-                      opacity: [0, 1, 0]
-                    }}
-                    transition={{ duration: 2.5, repeat: Infinity, delay: Math.random() * 2 }}
-                    className="absolute w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_20px_rgba(250,204,21,1)]"
-                  />
+        </div>
+      )}
+
+      {/* ── CARD REVEAL (Image 6 style) ── */}
+      {phase==='reveal'&&revPlayer&&curPack&&(
+        <div style={{position:'fixed',inset:0,zIndex:200,overflow:'hidden'}}>
+          {/* Stadium bg */}
+          <div style={{position:'absolute',inset:0,backgroundImage:"url('https://images.unsplash.com/photo-1459865264687-595d652de67e?q=80&w=2000')",backgroundSize:'cover',backgroundPosition:'center',filter:'brightness(0.3) saturate(0.5)'}}/>
+          {/* Color overlay matching pack */}
+          <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse 80% 70% at 50% 60%, ${curPack.glow}, transparent)`}}/>
+          {/* Top zigzag arrows like Image 5 */}
+          <div style={{position:'absolute',top:0,left:0,right:0,height:80,overflow:'hidden',opacity:0.6}}>
+            {[0,1,2,3].map(i=>(
+              <div key={i} style={{position:'absolute',top:`${i*18}px`,left:0,right:0,display:'flex',justifyContent:'center',gap:4}}>
+                {Array.from({length:20}).map((_,j)=>(
+                  <div key={j} style={{width:0,height:0,borderLeft:'8px solid transparent',borderRight:'8px solid transparent',borderTop:`12px solid rgba(180,180,0,${0.4-i*0.1})`}}/>
                 ))}
               </div>
-            )}
+            ))}
+          </div>
 
-            {/* Normal particles */}
-            {!isLegend && walkoutStage === 3 && (
-              <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                {[...Array(20)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ y: -50, x: `${Math.random() * 100}vw`, opacity: 0 }}
-                    animate={{ y: '100vh', opacity: [0, 1, 0], rotate: 360 }}
-                    transition={{ duration: 4, repeat: Infinity, delay: Math.random() * 3 }}
-                    className="absolute w-1 h-8 bg-blue-400/40 rounded-full"
-                  />
-                ))}
+          {/* Sparkle rays */}
+          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+            {Array.from({length:12}).map((_,i)=>(
+              <div key={i} style={{position:'absolute',width:3,background:`linear-gradient(${curPack.border},transparent)`,transformOrigin:'bottom center',transform:`rotate(${i*30}deg)`,height:'50%',bottom:'50%',opacity:0.5,animation:`pulse ${0.8+i*0.1}s ease-in-out infinite alternate`}}/>
+            ))}
+          </div>
+
+          {/* Main content */}
+          <div style={{position:'relative',zIndex:10,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20,padding:24}}>
+            {/* OVR display sides (like Image 6) */}
+            <div style={{display:'flex',alignItems:'center',gap:0,width:'100%',maxWidth:700,justifyContent:'center'}}>
+              {/* Left OVR */}
+              <div style={{textAlign:'center',minWidth:100}}>
+                <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:900,fontSize:52,color:'#ffcd3c',textShadow:'0 0 20px rgba(255,200,0,0.8)',lineHeight:1}}>{revPlayer.ovr}</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2,marginTop:8}}>
+                  {[['Tốc độ',revPlayer.stats.pac],['Sút',revPlayer.stats.sho],['Chuyền',revPlayer.stats.pas]].map(([l,v])=>(
+                    <div key={l} style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.7)'}}>{l}: <b style={{color:'#ffcd3c'}}>{v}</b></div>
+                  ))}
+                </div>
               </div>
-            )}
 
-            <div className="relative z-10 flex flex-col items-center justify-center h-full w-full">
-              {walkoutStage === 1 && (
-                <motion.div 
-                  initial={{ scale: 0, opacity: 0, y: 50 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0, opacity: 0, y: -50 }}
-                  className="drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] absolute"
-                >
-                  <img 
-                    src={`https://flagcdn.com/w320/${revealedPlayer.nation.toLowerCase()}.png`} 
-                    alt={revealedPlayer.nation} 
-                    className="w-64 h-auto rounded-lg shadow-2xl border-4 border-white/10"
-                  />
-                </motion.div>
-              )}
-              
-              {walkoutStage === 2 && (
-                <motion.div 
-                  initial={{ scale: 0, opacity: 0, y: 50 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0, opacity: 0, y: -50 }}
-                  className="text-9xl font-black text-white drop-shadow-[0_0_40px_rgba(255,255,255,0.5)] absolute tracking-tighter"
-                >
-                  {revealedPlayer.position}
-                </motion.div>
-              )}
+              {/* Center: BIG CARD */}
+              <div style={{margin:'0 24px',transform:'scale(1.1)',filter:`drop-shadow(0 0 30px ${curPack.glow}) drop-shadow(0 0 60px ${curPack.glow})`}}>
+                <PlayerCard player={revPlayer} size="lg"/>
+              </div>
 
-              {walkoutStage === 3 && (
-                <motion.div 
-                  initial={{ scale: 0.5, opacity: 0, y: 100 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  transition={{ type: "spring", bounce: 0.4 }}
-                  className="flex flex-col items-center justify-center w-full h-full"
-                >
-                  <h3 className={`text-4xl md:text-5xl font-black mb-8 tracking-widest uppercase text-center ${isLegend ? 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)]' : 'text-white drop-shadow-lg'}`}>
-                    {isLegend ? 'LEGENDARY WALKOUT!' : 'PLAYER WALKOUT'}
-                  </h3>
-                  <div className="scale-110 md:scale-125 mb-12">
-                    <PlayerCard player={revealedPlayer} size="lg" className={`${isLegend ? 'shadow-[0_0_100px_rgba(250,204,21,0.4)]' : 'shadow-[0_0_50px_rgba(255,255,255,0.1)]'}`} />
-                  </div>
-                  <button 
-                    onClick={() => { setRevealedPlayer(null); setOpening(null); stopAudio('PACK_OPEN'); playAudio('THEME', true); }}
-                    className="px-12 py-4 bg-white text-black font-black rounded-full hover:bg-zinc-200 transition-all text-xl shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:shadow-[0_0_50px_rgba(255,255,255,0.5)] hover:scale-105"
-                  >
-                    CONTINUE
-                  </button>
-                </motion.div>
+              {/* Right stats */}
+              <div style={{textAlign:'center',minWidth:100}}>
+                <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:900,fontSize:52,color:'#ffcd3c',textShadow:'0 0 20px rgba(255,200,0,0.8)',lineHeight:1}}>{revPlayer.ovr}</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2,marginTop:8}}>
+                  {[['Rê bóng',revPlayer.stats.dri],['Thể lực',revPlayer.stats.phy],['Phòng thủ',revPlayer.stats.def]].map(([l,v])=>(
+                    <div key={l} style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.7)'}}>{l}: <b style={{color:'#ffcd3c'}}>{v}</b></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Player name big */}
+            <div style={{textAlign:'center'}}>
+              {isLegend&&<div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:16,color:'#ffcd3c',letterSpacing:6,marginBottom:6,textShadow:'0 0 20px rgba(255,200,0,0.8)',animation:'pulse 1s ease-in-out infinite'}}>✨ LEGENDARY WALKOUT!</div>}
+              <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:900,fontSize:28,color:'white',letterSpacing:4}}>{revPlayer.name.toUpperCase()}</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.5)',fontWeight:600,marginTop:4}}>{revPlayer.position} · {revPlayer.nation} · {revPlayer.rarity}</div>
+            </div>
+
+            {/* Price display bottom (like Image 6: 41,300B) */}
+            <div style={{display:'flex',alignItems:'center',gap:8,background:'rgba(0,0,0,0.5)',padding:'6px 20px',borderRadius:20,border:'1px solid rgba(255,205,60,0.3)'}}>
+              <span style={{fontSize:14,fontWeight:900,color:'#ffcd3c',fontFamily:"'Oxanium',sans-serif"}}>🪙 {(revPlayer.ovr*450).toLocaleString()}B</span>
+              <span style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>Giá trị thị trường</span>
+            </div>
+
+            {/* Bottom action buttons */}
+            <div style={{display:'flex',gap:12}}>
+              <button onClick={close} style={{padding:'12px 28px',borderRadius:10,background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.2)',color:'white',fontWeight:800,fontSize:14,cursor:'pointer',letterSpacing:1}}>VÀO KHO</button>
+              {curPack&&coins>=curPack.cost&&(
+                <button onClick={()=>openPack(curPack)} style={{padding:'12px 28px',borderRadius:10,background:'linear-gradient(135deg,#0066cc,#00b4ff)',border:'none',color:'white',fontWeight:800,fontSize:14,cursor:'pointer',letterSpacing:1}}>MỞ TIẾP ({openCount})</button>
               )}
             </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
+
+      {/* ── STORE FRONT (Image 4 style) ── */}
+      {phase==='store'&&(
+        <>
+          <div style={{padding:'14px 20px',borderBottom:'1px solid rgba(0,180,255,0.12)',background:'rgba(5,11,26,0.97)',display:'flex',alignItems:'center',gap:12}}>
+            <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:20,letterSpacing:4}}>🛍️ CỬA HÀNG PACK</div>
+            <div style={{flex:1}}/>
+            <div style={{background:'rgba(255,205,60,0.1)',border:'1px solid rgba(255,205,60,0.3)',borderRadius:20,padding:'4px 14px',fontSize:13,fontWeight:800,color:'#ffcd3c'}}>🪙 {coins.toLocaleString()}</div>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.4em',color:'rgba(0,180,255,0.7)',marginBottom:6}}>ĐÃI RÁC TÌM VÀNG 😜</div>
+            <div style={{fontSize:13,color:'rgba(255,255,255,0.4)',fontWeight:600,marginBottom:24}}>Mở pack để khám phá cầu thủ mới — may mắn chờ bạn!</div>
+            {/* Pack grid - Image 4 style with big pack images */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:16,maxWidth:1100,margin:'0 auto'}}>
+              {PACKS.map(pack=>{
+                const canBuy=coins>=pack.cost;
+                return(
+                  <div key={pack.id} onClick={()=>canBuy&&openPack(pack)}
+                    style={{borderRadius:16,overflow:'hidden',cursor:canBuy?'pointer':'not-allowed',opacity:canBuy?1:0.6,transition:'transform 0.2s,filter 0.2s',position:'relative',border:`2px solid ${pack.border}44`}}
+                    onMouseEnter={e=>{if(canBuy){(e.currentTarget as HTMLElement).style.transform='translateY(-6px)';(e.currentTarget as HTMLElement).style.filter=`drop-shadow(0 8px 20px ${pack.glow})`;(e.currentTarget as HTMLElement).style.borderColor=pack.border;}}}
+                    onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='none';(e.currentTarget as HTMLElement).style.filter='none';(e.currentTarget as HTMLElement).style.borderColor=`${pack.border}44`;}}>
+                    {/* Pack visual (Image 4 style) */}
+                    <div style={{height:240,background:pack.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
+                      {/* Shine effect */}
+                      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse 60% 50% at 50% 30%,rgba(255,255,255,0.1),transparent)'}}/>
+                      {/* MULTI CLASS style label */}
+                      <div style={{position:'absolute',top:10,left:10,right:10,textAlign:'center',zIndex:2}}>
+                        <div style={{background:'rgba(0,0,0,0.5)',borderRadius:6,padding:'3px 8px',fontSize:9,fontWeight:800,color:'rgba(255,255,255,0.8)',letterSpacing:2,display:'inline-block',border:`1px solid ${pack.border}44`}}>MULTI CLASS</div>
+                      </div>
+                      {/* Pack icon */}
+                      <div style={{fontSize:72,zIndex:2,filter:`drop-shadow(0 4px 16px ${pack.glow})`}}>{pack.icon}</div>
+                      {/* OVR badge */}
+                      <div style={{position:'absolute',bottom:10,right:10,background:'rgba(0,0,0,0.7)',borderRadius:6,padding:'3px 8px',fontSize:12,fontWeight:900,color:pack.border,fontFamily:"'Oxanium',sans-serif",border:`1px solid ${pack.border}44`}}>+{pack.id==='BRONZE'?'72':pack.id==='SILVER'?'82':pack.id==='GOLD'?'92':pack.id==='SUPER_LEGENDARY'?'99':'102'}</div>
+                      <div style={{position:'absolute',bottom:10,left:10,fontSize:10,color:'rgba(255,255,255,0.5)',fontWeight:700}}>{pack.id==='LUCKY'?'99 món':pack.id==='MULTICLASS'?'99 món':'1 cầu thủ'}</div>
+                    </div>
+                    {/* Bottom info */}
+                    <div style={{background:'rgba(5,8,18,0.95)',padding:'12px 14px',borderTop:`1px solid ${pack.border}22`}}>
+                      <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:13,color:'white',marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pack.name}</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.4)',marginBottom:8,fontWeight:600}}>{pack.desc}</div>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                        <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:900,fontSize:16,color:'#ffcd3c'}}>🪙 {pack.cost.toLocaleString()}</div>
+                        <div style={{fontSize:10,fontWeight:800,padding:'3px 10px',borderRadius:20,background:canBuy?`${pack.border}22`:'rgba(255,255,255,0.05)',color:canBuy?pack.border:'rgba(255,255,255,0.3)',border:`1px solid ${canBuy?pack.border+'44':'rgba(255,255,255,0.08)'}`}}>
+                          {canBuy?'MỞ NGAY':'HẾT TIỀN'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

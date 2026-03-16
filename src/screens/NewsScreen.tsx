@@ -1,172 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { Newspaper, Globe, Trophy, ArrowLeft, Calendar, TrendingUp } from 'lucide-react';
-import { NewsItem } from '../types';
-import { motion, AnimatePresence } from 'framer-motion';
-
-interface NewsScreenProps {
-  onBack: () => void;
-}
-
-export default function NewsScreen({ onBack }: NewsScreenProps) {
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
-
-  useEffect(() => {
-    const savedNews = localStorage.getItem('fcweb_news');
-    if (savedNews) {
-      setNews(JSON.parse(savedNews));
-    } else {
-      const initialNews: NewsItem[] = [
-        {
-          id: '1',
-          title: 'Global Football Market Heats Up',
-          content: 'Top clubs are looking for new talents. The transfer window is officially open and scouts are everywhere.',
-          date: new Date().toLocaleDateString(),
-          type: 'WORLD_NEWS',
-          image: 'https://picsum.photos/seed/football1/800/400'
-        },
-        {
-          id: '2',
-          title: 'New Training Methods Revolutionize the Game',
-          content: 'Sports scientists suggest that high-intensity interval training combined with tactical drills is the key to success.',
-          date: new Date().toLocaleDateString(),
-          type: 'WORLD_NEWS',
-          image: 'https://picsum.photos/seed/training/800/400'
-        }
-      ];
-      setNews(initialNews);
-      localStorage.setItem('fcweb_news', JSON.stringify(initialNews));
-    }
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-zinc-950 p-6 overflow-y-auto">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-10">
-          <button onClick={onBack} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-          <div className="text-center">
-            <h1 className="text-4xl font-black italic tracking-tighter flex items-center gap-3 justify-center">
-              <Newspaper className="w-10 h-10 text-emerald-500" />
-              FOOTBALL DAILY
-            </h1>
-            <p className="text-zinc-500 text-sm uppercase tracking-widest mt-1">The pulse of the beautiful game</p>
-          </div>
-          <div className="w-10" /> {/* Spacer */}
-        </div>
-
-        <div className="space-y-8">
-          {news.map((item, idx) => (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              className="bg-zinc-900/50 rounded-3xl border border-zinc-800 overflow-hidden group hover:border-emerald-500/50 transition-colors"
-            >
-              {item.image && (
-                <div className="h-64 overflow-hidden relative">
-                  <img 
-                    src={item.image} 
-                    alt={item.title} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute top-4 left-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                      item.type === 'ACHIEVEMENT' ? 'bg-yellow-500 text-black' : 
-                      item.type === 'INTERVIEW' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
-                    }`}>
-                      {item.type.replace('_', ' ')}
-                    </span>
-                  </div>
-                </div>
-              )}
-              <div className="p-8">
-                <div className="flex items-center gap-4 text-zinc-500 text-xs mb-4">
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {item.date}</span>
-                  <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> Global Edition</span>
-                </div>
-                <h2 className="text-2xl font-black italic mb-4 group-hover:text-emerald-400 transition-colors cursor-pointer" onClick={() => setSelectedArticle(item)}>{item.title}</h2>
-                <p className="text-zinc-400 leading-relaxed text-lg line-clamp-2">{item.content}</p>
-                <button 
-                  onClick={() => setSelectedArticle(item)}
-                  className="mt-4 text-emerald-500 hover:text-emerald-400 font-bold text-sm uppercase tracking-widest flex items-center gap-1"
-                >
-                  Read Full Article <ArrowLeft className="w-4 h-4 rotate-180" />
-                </button>
-              </div>
-            </motion.div>
-          ))}
-
-          {news.length === 0 && (
-            <div className="text-center py-20">
-              <Newspaper className="w-20 h-20 text-zinc-800 mx-auto mb-4" />
-              <p className="text-zinc-500">No news updates yet. Keep playing to make headlines!</p>
-            </div>
-          )}
-        </div>
+import React from 'react';
+interface Props { onBack:()=>void; }
+const NEWS=[
+  {title:'Mbappe ghi hat-trick trong chiến thắng 5-1',tag:'KẾT QUẢ',time:'2 giờ trước',img:'https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=400&auto=format',desc:'Tiền đạo người Pháp tỏa sáng rực rỡ với 3 bàn thắng, giúp đội nhà đại thắng.'},
+  {title:'Real Madrid dẫn đầu La Liga với 8 điểm',tag:'BẢNG XH',time:'5 giờ trước',img:'https://images.unsplash.com/photo-1556056504-5c7696c4c28d?q=80&w=400&auto=format',desc:'Đội bóng Hoàng gia Tây Ban Nha duy trì phong độ hoàn hảo sau 12 vòng đấu.'},
+  {title:'Erling Haaland phá kỷ lục ghi bàn Premier League',tag:'KỶ LỤC',time:'1 ngày trước',img:'https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?q=80&w=400&auto=format',desc:'Chân sút người Na Uy đã vượt qua mốc 50 bàn thắng trong vòng 52 trận.'},
+  {title:'Champions League: Kết quả tứ kết đáng kinh ngạc',tag:'C1',time:'2 ngày trước',img:'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=400&auto=format',desc:'4 trận tứ kết đêm qua chứng kiến nhiều bàn thắng đẹp và bất ngờ.'},
+];
+export default function NewsScreen({onBack}:Props){
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:'#05080f',overflow:'hidden',fontFamily:"'Exo 2',sans-serif"}}>
+      <div style={{padding:'14px 20px',borderBottom:'1px solid rgba(0,180,255,0.12)',background:'rgba(5,11,26,0.97)',display:'flex',alignItems:'center',gap:12}}>
+        <button onClick={onBack} style={{background:'rgba(0,180,255,0.1)',border:'1px solid rgba(0,180,255,0.25)',borderRadius:8,padding:'6px 12px',color:'#00b4ff',fontWeight:800,fontSize:12,cursor:'pointer'}}>← Back</button>
+        <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:18,letterSpacing:3}}>📰 TIN TỨC BÓNG ĐÁ</div>
       </div>
-
-      {/* Article Modal */}
-      <AnimatePresence>
-        {selectedArticle && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-            onClick={() => setSelectedArticle(null)}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="relative">
-                {selectedArticle.image && (
-                  <div className="h-64 sm:h-80 w-full relative">
-                    <img 
-                      src={selectedArticle.image} 
-                      alt={selectedArticle.title} 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                )}
-                <button 
-                  onClick={() => setSelectedArticle(null)}
-                  className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/80 rounded-full text-white backdrop-blur-md transition-colors z-10"
-                >
-                  <ArrowLeft className="w-6 h-6 rotate-180" />
-                </button>
+      <div style={{flex:1,overflowY:'auto',padding:'20px',display:'flex',flexDirection:'column',gap:14,maxWidth:900,margin:'0 auto',width:'100%'}}>
+        {NEWS.map((n,i)=>(
+          <div key={i} style={{display:'flex',gap:16,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:12,overflow:'hidden',cursor:'pointer',transition:'all 0.2s'}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='rgba(0,180,255,0.05)';(e.currentTarget as HTMLElement).style.borderColor='rgba(0,180,255,0.2)';}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='rgba(255,255,255,0.03)';(e.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.06)';}}>
+            <img src={n.img} alt="" style={{width:140,height:100,objectFit:'cover',flexShrink:0}} onError={e=>{(e.target as HTMLElement).style.display='none';}} />
+            <div style={{padding:'14px 14px 14px 0',flex:1,minWidth:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <span style={{fontSize:9,fontWeight:800,background:'rgba(0,180,255,0.2)',color:'#00b4ff',padding:'2px 8px',borderRadius:20,letterSpacing:'0.2em'}}>{n.tag}</span>
+                <span style={{fontSize:11,color:'rgba(255,255,255,0.35)',fontWeight:600}}>{n.time}</span>
               </div>
-              <div className="p-8">
-                <div className="flex items-center gap-4 text-zinc-500 text-xs mb-4">
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {selectedArticle.date}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                    selectedArticle.type === 'ACHIEVEMENT' ? 'bg-yellow-500/20 text-yellow-500' : 
-                    selectedArticle.type === 'INTERVIEW' ? 'bg-blue-500/20 text-blue-500' : 'bg-emerald-500/20 text-emerald-500'
-                  }`}>
-                    {selectedArticle.type.replace('_', ' ')}
-                  </span>
-                </div>
-                <h1 className="text-3xl sm:text-4xl font-black italic mb-6 text-white">{selectedArticle.title}</h1>
-                <div className="prose prose-invert prose-emerald max-w-none">
-                  {selectedArticle.content.split('\n').map((paragraph, idx) => (
-                    <p key={idx} className="text-zinc-300 text-lg leading-relaxed mb-4">
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <div style={{fontWeight:800,fontSize:15,color:'white',marginBottom:6,lineHeight:1.3}}>{n.title}</div>
+              <div style={{fontSize:12,color:'rgba(255,255,255,0.5)',fontWeight:600,lineHeight:1.5}}>{n.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

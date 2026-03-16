@@ -1,78 +1,53 @@
 import React from 'react';
 import { Player } from '../types';
 
-interface Props {
-  player: Player;
-  onClick?: () => void;
-  size?: 'sm' | 'md' | 'lg';
-  className?: string;
+interface Props { player: Player; onClick?: () => void; size?: 'xs'|'sm'|'md'|'lg'; className?: string; selected?: boolean; }
+
+const SF=(id:number)=>`https://cdn.sofifa.net/players/${id}/24_240.png`;
+const AV=(n:string)=>`https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=1a2a4a&color=7eb3ff&size=128&bold=true`;
+const SOFIFA:Record<string,number>={p1:158023,p2:20801,p3:192476,p4:203376,p5:192119,p6:231747,p7:190871,p8:215914,p9:201024,p10:208722,p11:188545,p12:177003,p13:182521,p14:245367,p15:211117,p16:239087,p17:200069,p18:209331,p19:239085,p20:220834,p21:202126,p22:238794,p23:245369,p24:244478,p26:246169,p27:188350,p28:237397,p29:200104,p30:234396};
+
+function getBg(p:Player){
+  if(p.rarity==='SUPER_LEGENDARY')return{bg:'linear-gradient(155deg,#7a20cc,#4a0a90,#1e0440)',border:'#9040e0',shadow:'0 0 25px rgba(144,64,224,0.55)'};
+  if(p.rarity==='GOLD'&&p.ovr>=90)return{bg:'linear-gradient(155deg,#44ccee,#0066bb,#002255)',border:'#44ccee',shadow:'0 0 20px rgba(68,204,238,0.45)'};
+  if(p.rarity==='GOLD')return{bg:'linear-gradient(155deg,#ffe066,#bb8800,#6a4a00)',border:'#ffe066',shadow:'0 0 15px rgba(200,160,0,0.3)'};
+  if(p.rarity==='SILVER')return{bg:'linear-gradient(155deg,#ccdde8,#8899b0,#445566)',border:'#aabbcc',shadow:'none'};
+  return{bg:'linear-gradient(155deg,#b07a40,#6a3f18,#3a1e08)',border:'#c08040',shadow:'none'};
 }
+function statColor(v:number){if(v>=90)return'#00e676';if(v>=80)return'#69f0ae';if(v>=70)return'#ffcd3c';if(v>=60)return'#ff9800';return'#ff5252';}
+function getImg(p:Player){const id=SOFIFA[p.id];if(id&&id>0)return SF(id);return AV(p.name);}
 
-export default function PlayerCard({ player, onClick, size = 'md', className = '' }: Props) {
-  const getCardTheme = (p: Player) => {
-    if (p.rarity === 'SUPER_LEGENDARY') return 'from-fuchsia-400 via-violet-600 to-slate-950 border-fuchsia-200/70 shadow-[0_0_30px_rgba(168,85,247,0.35)]';
-    if (p.rarity === 'GOLD' || p.ovr >= 86) return 'from-yellow-200 via-amber-400 to-yellow-900 border-yellow-100/70 shadow-[0_0_26px_rgba(250,204,21,0.28)]';
-    if (p.rarity === 'SILVER' || p.ovr >= 75) return 'from-slate-200 via-slate-400 to-slate-800 border-slate-100/60 shadow-[0_0_24px_rgba(148,163,184,0.22)]';
-    return 'from-amber-500 via-amber-700 to-stone-950 border-amber-200/40 shadow-[0_0_18px_rgba(217,119,6,0.2)]';
-  };
-
-  const sizeClasses = {
-    sm: 'w-24 h-36 text-[9px]',
-    md: 'w-40 h-60 text-xs',
-    lg: 'w-52 h-80 text-sm',
-  };
-
+export default function PlayerCard({player:p,onClick,size='md',className='',selected}:Props){
+  const {bg,border,shadow}=getBg(p);
+  const w={xs:64,sm:96,md:128,lg:176}[size];
+  const h={xs:96,sm:144,md:192,lg:264}[size];
+  const ovrSize={xs:16,sm:22,md:28,lg:36}[size];
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group relative rounded-[22px] bg-gradient-to-br ${getCardTheme(player)} p-[1.5px] text-left transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] ${sizeClasses[size]} ${className}`}
-    >
-      <div className="relative w-full h-full rounded-[21px] overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(10,10,12,0.2)_30%,rgba(7,10,17,0.92)_100%)]">
-        <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.38),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.08),transparent_40%)]" />
-        <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 blur-2xl rounded-full" />
-
-        <div className="absolute top-3 left-3 z-10 text-white">
-          <div className="text-2xl leading-none font-black drop-shadow">{player.ovr}</div>
-          <div className="text-[11px] font-extrabold tracking-[0.25em] mt-1">{player.position}</div>
-          {player.nation && (
-            <img src={`https://flagcdn.com/w40/${player.nation.toLowerCase()}.png`} alt={player.nation} className="w-5 h-4 object-cover rounded-sm mt-2 border border-white/40" />
-          )}
-        </div>
-
-        <div className="absolute top-3 right-3 z-10 rounded-full px-2 py-1 text-[10px] font-black bg-black/35 text-white border border-white/10 backdrop-blur-md">
-          +{player.level}
-        </div>
-
-        <div className="absolute inset-x-0 top-8 bottom-16 flex items-center justify-center z-0">
-          <img
-            src={player.image}
-            alt={player.name}
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover object-top opacity-95 group-hover:scale-105 transition-transform duration-300"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent_20%,rgba(3,7,18,0.15)_55%,rgba(2,6,23,0.88)_100%)]" />
-        </div>
-
-        <div className="absolute bottom-0 inset-x-0 z-10 p-3 bg-[linear-gradient(180deg,rgba(3,7,18,0.1),rgba(3,7,18,0.92)_20%,rgba(3,7,18,0.98)_100%)]">
-          <div className="text-center font-black uppercase tracking-tight truncate text-white text-sm mb-2">{player.name}</div>
-          <div className="grid grid-cols-3 gap-1.5 text-[10px] font-semibold text-white/90">
-            {[
-              ['PAC', player.stats.pac],
-              ['SHO', player.stats.sho],
-              ['PAS', player.stats.pas],
-              ['DRI', player.stats.dri],
-              ['DEF', player.stats.def],
-              ['PHY', player.stats.phy],
-            ].map(([label, value]) => (
-              <div key={label as string} className="rounded-lg bg-white/8 border border-white/8 px-1.5 py-1 flex items-center justify-between">
-                <span className="text-white/70">{label}</span>
-                <span className="font-black">{value}</span>
-              </div>
-            ))}
-          </div>
+    <div onClick={onClick} className={`card-shine ${className}`} style={{width:w,height:h,background:bg,border:`2px solid ${border}`,boxShadow:shadow,borderRadius:12,position:'relative',overflow:'hidden',cursor:'pointer',flexShrink:0,transition:'transform 0.18s,filter 0.18s',userSelect:'none',outline:selected?`2px solid white`:undefined}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='scale(1.06)';(e.currentTarget as HTMLElement).style.filter='brightness(1.12)';}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='scale(1)';(e.currentTarget as HTMLElement).style.filter='brightness(1)';}}>
+      {/* Top left: OVR + POS + Flag */}
+      <div style={{position:'absolute',top:5,left:5,zIndex:20,display:'flex',flexDirection:'column',alignItems:'center',gap:1}}>
+        <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:ovrSize,lineHeight:1,textShadow:'0 1px 4px rgba(0,0,0,0.6)',color:'white'}}>{p.ovr}</div>
+        <div style={{fontWeight:800,fontSize:ovrSize*0.38,color:'rgba(255,255,255,0.9)',lineHeight:1}}>{p.position}</div>
+        {p.nation&&<img src={`https://flagcdn.com/w20/${p.nation.toLowerCase()}.png`} alt={p.nation} style={{width:16,height:'auto',borderRadius:2,marginTop:2}} onError={e=>{(e.target as HTMLElement).style.display='none';}} />}
+      </div>
+      {/* Level badge */}
+      <div style={{position:'absolute',top:5,right:5,zIndex:20,background:'rgba(0,0,0,0.55)',borderRadius:4,padding:'1px 5px',fontSize:9,fontWeight:900,color:'white'}}>+{p.level}</div>
+      {/* Player image */}
+      <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',paddingBottom:'35%',paddingTop:'10%',zIndex:10}}>
+        <img src={getImg(p)} alt={p.name} style={{width:'70%',height:'70%',objectFit:'contain',filter:'drop-shadow(0 4px 12px rgba(0,0,0,0.7))'}} onError={e=>{(e.target as HTMLImageElement).src=AV(p.name);}} />
+      </div>
+      {/* Bottom: name + stats */}
+      <div style={{position:'absolute',bottom:0,left:0,right:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(4px)',padding:'5px 6px',zIndex:20}}>
+        <div style={{textAlign:'center',fontWeight:800,fontSize:size==='xs'?7:size==='sm'?9:size==='md'?11:13,color:'white',textTransform:'uppercase',letterSpacing:0.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginBottom:3,fontFamily:"'Exo 2',sans-serif"}}>{p.name.split(' ').pop()}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1px 6px'}}>
+          {[['PAC',p.stats.pac],['SHO',p.stats.sho],['PAS',p.stats.pas],['DRI',p.stats.dri],['DEF',p.stats.def],['PHY',p.stats.phy]].map(([l,v])=>(
+            <div key={l as string} style={{display:'flex',justifyContent:'space-between',fontSize:size==='xs'?6:size==='sm'?7:8}}>
+              <span style={{color:'rgba(255,255,255,0.55)',fontWeight:700}}>{l}</span>
+              <span style={{fontWeight:800,color:statColor(v as number)}}>{v}</span>
+            </div>
+          ))}
         </div>
       </div>
-    </button>
+    </div>
   );
 }

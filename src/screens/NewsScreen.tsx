@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Newspaper, Globe, Trophy, ArrowLeft, Calendar, TrendingUp } from 'lucide-react';
 import { NewsItem } from '../types';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface NewsScreenProps {
   onBack: () => void;

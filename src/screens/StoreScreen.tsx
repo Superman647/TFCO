@@ -1,215 +1,133 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Player } from '../types';
 import { generateRandomPlayer } from '../data/players';
 import PlayerCard from '../components/PlayerCard';
-import { motion, AnimatePresence } from 'motion/react';
 import { useAudio } from '../contexts/AudioContext';
 
-interface Props {
-  coins: number;
-  setCoins: React.Dispatch<React.SetStateAction<number>>;
-  inventory: Player[];
-  setInventory: React.Dispatch<React.SetStateAction<Player[]>>;
-}
+interface Props { coins:number; setCoins:React.Dispatch<React.SetStateAction<number>>; inventory:Player[]; setInventory:React.Dispatch<React.SetStateAction<Player[]>>; }
 
 const PACKS = [
-  { id: 'BRONZE', name: 'BRONZE PACK', cost: 100, color: 'from-amber-700 to-amber-900', shadow: 'rgba(180,83,9,0.3)' },
-  { id: 'SILVER', name: 'SILVER PACK', cost: 500, color: 'from-zinc-300 to-zinc-500', shadow: 'rgba(161,161,170,0.3)' },
-  { id: 'GOLD', name: 'GOLD PACK', cost: 1000, color: 'from-yellow-400 to-yellow-600', shadow: 'rgba(250,204,21,0.3)' },
-  { id: 'SUPER_LEGENDARY', name: 'LEGEND PACK', cost: 5000, color: 'from-purple-600 to-indigo-900', shadow: 'rgba(139,92,246,0.4)' },
-  { id: 'LUCKY', name: 'LUCKY PACK', cost: 777, color: 'from-red-500 via-green-500 to-blue-500', shadow: 'rgba(255,255,255,0.5)' },
+  { id:'BRONZE',          name:'BRONZE PACK',  cost:200,   img:'🥉', desc:'Cầu thủ OVR 55-72',     color:'#b87333', bg:'linear-gradient(155deg,#b07a40,#5a2e10)',  border:'#c08040' },
+  { id:'SILVER',          name:'SILVER PACK',  cost:500,   img:'🥈', desc:'Cầu thủ OVR 70-82',     color:'#b0c0d0', bg:'linear-gradient(155deg,#ccdde8,#445566)',  border:'#aabbcc' },
+  { id:'GOLD',            name:'GOLD PACK',    cost:1200,  img:'🥇', desc:'Cầu thủ OVR 80-92',     color:'#ffcd3c', bg:'linear-gradient(155deg,#ffe066,#7a5010)',  border:'#ffe066' },
+  { id:'SUPER_LEGENDARY', name:'LEGEND PACK',  cost:5000,  img:'💎', desc:'Cầu thủ OVR 93-99',     color:'#b060ff', bg:'linear-gradient(155deg,#9040e0,#2e1060)',  border:'#a060e0' },
+  { id:'LUCKY',           name:'LUCKY PACK',   cost:777,   img:'🎰', desc:'Ngẫu nhiên – may mắn!', color:'#ff6b9d', bg:'linear-gradient(155deg,#ff6b9d,#c62a47)',  border:'#ff6b9d' },
 ];
+
+const S: Record<string, React.CSSProperties> = {
+  root:     { height:'100%', display:'flex', flexDirection:'column', background:'#05080f', overflow:'hidden' },
+  header:   { padding:'18px 24px', borderBottom:'1px solid rgba(0,180,255,0.12)', background:'rgba(5,11,26,0.95)', display:'flex', alignItems:'center', gap:12 },
+  body:     { flex:1, overflowY:'auto', padding:'24px' },
+  grid:     { display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:20, maxWidth:1100, margin:'0 auto' },
+  packCard: { borderRadius:16, overflow:'hidden', cursor:'pointer', transition:'transform 0.2s,filter 0.2s', position:'relative', display:'flex', flexDirection:'column' },
+  packImg:  { height:260, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' },
+  packBot:  { padding:'14px 16px', background:'rgba(0,0,0,0.6)', backdropFilter:'blur(8px)' },
+  btn:      { width:'100%', padding:'10px 0', borderRadius:10, fontWeight:800, fontSize:14, cursor:'pointer', border:'none', marginTop:8, transition:'filter 0.15s,transform 0.1s', letterSpacing:1 },
+  overlay:  { position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.95)', backdropFilter:'blur(20px)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' },
+};
 
 export default function StoreScreen({ coins, setCoins, inventory, setInventory }: Props) {
   const { playAudio, stopAudio } = useAudio();
-  const [opening, setOpening] = useState<string | null>(null);
-  const [revealedPlayer, setRevealedPlayer] = useState<Player | null>(null);
-  const [walkoutStage, setWalkoutStage] = useState<number>(0);
-
-  useEffect(() => {
-    return () => stopAudio('PACK_OPEN');
-  }, []);
+  const [phase, setPhase] = useState<'store'|'opening'|'reveal'>('store');
+  const [revealedPlayer, setRevealedPlayer] = useState<Player|null>(null);
+  const [openingPack, setOpeningPack] = useState<typeof PACKS[0]|null>(null);
+  const [step, setStep] = useState(0);
+  const [openCount, setOpenCount] = useState(0);
 
   const openPack = (pack: typeof PACKS[0]) => {
     if (coins < pack.cost) return;
-    stopAudio('THEME');
-    playAudio('PACK_OPEN');
     setCoins(c => c - pack.cost);
-    setOpening(pack.id);
-    setRevealedPlayer(null);
-    setWalkoutStage(0);
-    
-    let packType = pack.id;
+    setOpeningPack(pack);
+    setPhase('opening');
+    setStep(0);
+    let pt = pack.id;
     if (pack.id === 'LUCKY') {
-      const rand = Math.random();
-      if (rand < 0.4) packType = 'BRONZE';
-      else if (rand < 0.7) packType = 'SILVER';
-      else if (rand < 0.9) packType = 'GOLD';
-      else packType = 'SUPER_LEGENDARY';
+      const r = Math.random();
+      if (r < 0.35) pt='BRONZE'; else if (r < 0.65) pt='SILVER'; else if (r < 0.88) pt='GOLD'; else pt='SUPER_LEGENDARY';
     }
-    
-    const newPlayer = generateRandomPlayer(packType as any);
-    
-    setTimeout(() => {
-      setRevealedPlayer(newPlayer);
-      setWalkoutStage(1);
-      
-      setTimeout(() => {
-        setWalkoutStage(2);
-        
-        setTimeout(() => {
-          setWalkoutStage(3);
-          setInventory(prev => [...prev, newPlayer]);
-        }, 1500);
-      }, 1500);
-    }, 2000);
+    const p = generateRandomPlayer(pt as any);
+    setTimeout(() => { setStep(1); setTimeout(() => { setStep(2); setTimeout(() => { setRevealedPlayer(p); setInventory(inv => [...inv, p]); setPhase('reveal'); setOpenCount(c=>c+1); }, 1000); }, 1200); }, 1400);
   };
 
   const isLegend = revealedPlayer && revealedPlayer.ovr >= 90;
 
+  if (phase !== 'store') return (
+    <div style={S.overlay}>
+      {phase === 'opening' && openingPack && (
+        <div style={{ textAlign:'center' }}>
+          <div style={{ fontSize:120, marginBottom:20, animation:'bounce 0.4s ease infinite alternate', display:'inline-block' }}>{openingPack.img}</div>
+          <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:28, color:'white', letterSpacing:4, marginBottom:8 }}>{step===0?'ĐANG MỞ...':step===1?'SẮP RA...':'CHUẨN BỊ!'}</div>
+          <div style={{ display:'flex', gap:8, justifyContent:'center', marginTop:16 }}>
+            {[0,1,2].map(i => <div key={i} style={{ width:10, height:10, borderRadius:'50%', background: step>=i ? openingPack.color : 'rgba(255,255,255,0.2)', transition:'background 0.3s' }} />)}
+          </div>
+        </div>
+      )}
+      {phase === 'reveal' && revealedPlayer && (
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:24, animation:'fadeSlideUp 0.4s ease' }}>
+          {isLegend && (
+            <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(180,96,255,0.3),transparent)', pointerEvents:'none' }} />
+          )}
+          <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:isLegend?42:32, color: isLegend?'#e060ff':'#00e676', letterSpacing:4, textAlign:'center', textShadow: isLegend?'0 0 30px rgba(200,80,255,0.8)':'0 0 20px rgba(0,230,120,0.6)' }}>
+            {isLegend ? '✨ LEGENDARY WALKOUT!' : '🎉 NEW PLAYER!'}
+          </div>
+          <div style={{ transform:'scale(1.15)', filter: isLegend ? 'drop-shadow(0 0 30px rgba(180,96,255,0.6))' : 'drop-shadow(0 0 20px rgba(0,230,120,0.4))' }}>
+            <PlayerCard player={revealedPlayer} size="lg" />
+          </div>
+          <div style={{ display:'flex', gap:12 }}>
+            <button onClick={() => { setPhase('store'); setRevealedPlayer(null); }} style={{ padding:'12px 32px', borderRadius:10, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.2)', color:'white', fontWeight:800, fontSize:15, cursor:'pointer', letterSpacing:2 }}>XEM KHO</button>
+            {openingPack && coins >= openingPack.cost && (
+              <button onClick={() => openPack(openingPack)} style={{ padding:'12px 32px', borderRadius:10, background:'linear-gradient(135deg,#0066cc,#00b4ff)', border:'none', color:'white', fontWeight:800, fontSize:15, cursor:'pointer', letterSpacing:2 }}>MỞ TIẾP</button>
+            )}
+          </div>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,0.4)', fontWeight:600 }}>Đã mở {openCount} pack trong phiên này</div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="absolute inset-0 flex flex-col items-center p-8 overflow-y-auto bg-transparent">
-      {/* Enhanced Background Removed to show global background */}
-      
-      <AnimatePresence mode="wait">
-        {!revealedPlayer && !opening ? (
-          <motion.div 
-            key="store-front"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="flex flex-col items-center w-full max-w-5xl z-10 my-auto"
-          >
-            <h2 className="text-4xl font-black italic mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">STORE</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full pb-8">
-              {PACKS.map(pack => (
-                <div key={pack.id} className="flex flex-col items-center">
-                  <div 
-                    className={`w-56 h-80 bg-gradient-to-br ${pack.color} rounded-2xl shadow-[0_0_30px_${pack.shadow}] border border-white/20 flex items-center justify-center mb-6 relative overflow-hidden group cursor-pointer transition-transform hover:scale-105`}
-                    onClick={() => openPack(pack)}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay" />
-                    <h2 className="text-3xl font-black italic text-white z-10 drop-shadow-lg text-center leading-tight">{pack.name.replace(' ', '\n')}</h2>
+    <div style={S.root}>
+      <div style={S.header}>
+        <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:22, letterSpacing:4 }}>🛍️ CỬA HÀNG</div>
+        <div style={{ flex:1 }} />
+        <div style={{ background:'rgba(255,205,60,0.1)', border:'1px solid rgba(255,205,60,0.3)', borderRadius:20, padding:'4px 14px', fontSize:13, fontWeight:800, color:'#ffcd3c' }}>🪙 {coins.toLocaleString()}</div>
+      </div>
+      <div style={S.body}>
+        <div style={{ textAlign:'center', marginBottom:28 }}>
+          <div style={{ fontSize:11, fontWeight:700, letterSpacing:'0.4em', color:'rgba(0,180,255,0.7)', marginBottom:6 }}>MỞ PACK ĐỂ NHẬN CẦU THỦ MỚI</div>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,0.4)', fontWeight:600 }}>Mỗi pack chứa 1 cầu thủ ngẫu nhiên với độ hiếm tương ứng</div>
+        </div>
+        <div style={S.grid}>
+          {PACKS.map(pack => {
+            const canBuy = coins >= pack.cost;
+            return (
+              <div key={pack.id} style={S.packCard}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(-6px)';(e.currentTarget as HTMLElement).style.filter='brightness(1.1)';}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='none';(e.currentTarget as HTMLElement).style.filter='none';}}>
+                <div style={{ ...S.packImg, background:pack.bg, border:`2px solid ${pack.border}44`, borderRadius:'16px 16px 0 0' }}>
+                  <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse 60% 50% at 50% 30%, rgba(255,255,255,0.08),transparent)' }} />
+                  <div style={{ textAlign:'center', position:'relative', zIndex:2 }}>
+                    <div style={{ fontSize:80, lineHeight:1, filter:'drop-shadow(0 4px 16px rgba(0,0,0,0.5))' }}>{pack.img}</div>
+                    <div style={{ fontFamily:"'Oxanium',sans-serif", fontWeight:800, fontSize:16, color:'white', marginTop:12, letterSpacing:3, textShadow:'0 2px 8px rgba(0,0,0,0.8)' }}>{pack.name}</div>
+                    <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', marginTop:4, fontWeight:600 }}>{pack.desc}</div>
                   </div>
-                  <button 
-                    onClick={() => openPack(pack)}
-                    disabled={coins < pack.cost}
-                    className="px-8 py-4 bg-zinc-800 text-white font-bold rounded-full hover:bg-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 w-full justify-center border border-zinc-700 hover:border-zinc-500 shadow-lg"
-                  >
-                    <span className="text-lg">BUY</span>
-                    <span className="text-zinc-500">|</span>
-                    <span className="text-yellow-500 font-mono text-lg">{pack.cost} C</span>
+                </div>
+                <div style={{ ...S.packBot, borderRadius:'0 0 16px 16px', border:`1px solid ${pack.border}33`, borderTop:'none' }}>
+                  <div style={{ textAlign:'center', fontSize:13, color:'rgba(255,255,255,0.5)', marginBottom:4, fontWeight:600 }}>Giá</div>
+                  <div style={{ textAlign:'center', fontSize:22, fontWeight:900, color:'#ffcd3c', fontFamily:"'Oxanium',sans-serif" }}>🪙 {pack.cost.toLocaleString()}</div>
+                  <button onClick={() => openPack(pack)} disabled={!canBuy} style={{ ...S.btn, background: canBuy ? `linear-gradient(135deg,${pack.color}99,${pack.color})` : 'rgba(255,255,255,0.05)', color: canBuy ? '#000' : 'rgba(255,255,255,0.3)', cursor: canBuy?'pointer':'not-allowed', border:`1px solid ${canBuy?pack.border:'rgba(255,255,255,0.1)'}`, filter: canBuy?'none':'grayscale(1)' }}>
+                    {canBuy ? 'MỞ PACK' : 'KHÔNG ĐỦ COINS'}
                   </button>
                 </div>
-              ))}
-            </div>
-          </motion.div>
-        ) : opening && !revealedPlayer ? (
-          <div className="fixed inset-0 flex items-center justify-center z-[100]">
-            <motion.div 
-              key="opening"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: [0.8, 1.2, 1], opacity: 1, rotateY: [0, 180, 360, 540, 720] }}
-              transition={{ duration: 2, ease: "easeInOut" }}
-              className={`w-64 h-96 bg-gradient-to-br ${PACKS.find(p => p.id === opening)?.color} rounded-2xl shadow-[0_0_100px_${PACKS.find(p => p.id === opening)?.shadow}]`}
-            />
-          </div>
-        ) : revealedPlayer ? (
-          <motion.div 
-            key="revealed"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center w-full h-full fixed inset-0 bg-black/90 backdrop-blur-xl z-[100]"
-          >
-            {/* Fireworks for legends */}
-            {isLegend && walkoutStage === 3 && (
-              <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
-                <div className="absolute w-[800px] h-[800px] bg-yellow-500/20 rounded-full blur-[100px] animate-pulse" />
-                {[...Array(30)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ x: '50vw', y: '100vh', scale: 0 }}
-                    animate={{ 
-                      x: `${Math.random() * 100}vw`, 
-                      y: `${Math.random() * 100}vh`,
-                      scale: [0, Math.random() * 3 + 1, 0],
-                      opacity: [0, 1, 0]
-                    }}
-                    transition={{ duration: 2.5, repeat: Infinity, delay: Math.random() * 2 }}
-                    className="absolute w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_20px_rgba(250,204,21,1)]"
-                  />
-                ))}
               </div>
-            )}
-
-            {/* Normal particles */}
-            {!isLegend && walkoutStage === 3 && (
-              <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                {[...Array(20)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ y: -50, x: `${Math.random() * 100}vw`, opacity: 0 }}
-                    animate={{ y: '100vh', opacity: [0, 1, 0], rotate: 360 }}
-                    transition={{ duration: 4, repeat: Infinity, delay: Math.random() * 3 }}
-                    className="absolute w-1 h-8 bg-blue-400/40 rounded-full"
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="relative z-10 flex flex-col items-center justify-center h-full w-full">
-              {walkoutStage === 1 && (
-                <motion.div 
-                  initial={{ scale: 0, opacity: 0, y: 50 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0, opacity: 0, y: -50 }}
-                  className="drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] absolute"
-                >
-                  <img 
-                    src={`https://flagcdn.com/w320/${revealedPlayer.nation.toLowerCase()}.png`} 
-                    alt={revealedPlayer.nation} 
-                    className="w-64 h-auto rounded-lg shadow-2xl border-4 border-white/10"
-                  />
-                </motion.div>
-              )}
-              
-              {walkoutStage === 2 && (
-                <motion.div 
-                  initial={{ scale: 0, opacity: 0, y: 50 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0, opacity: 0, y: -50 }}
-                  className="text-9xl font-black text-white drop-shadow-[0_0_40px_rgba(255,255,255,0.5)] absolute tracking-tighter"
-                >
-                  {revealedPlayer.position}
-                </motion.div>
-              )}
-
-              {walkoutStage === 3 && (
-                <motion.div 
-                  initial={{ scale: 0.5, opacity: 0, y: 100 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  transition={{ type: "spring", bounce: 0.4 }}
-                  className="flex flex-col items-center justify-center w-full h-full"
-                >
-                  <h3 className={`text-4xl md:text-5xl font-black mb-8 tracking-widest uppercase text-center ${isLegend ? 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-[0_0_30px_rgba(250,204,21,0.8)]' : 'text-white drop-shadow-lg'}`}>
-                    {isLegend ? 'LEGENDARY WALKOUT!' : 'PLAYER WALKOUT'}
-                  </h3>
-                  <div className="scale-110 md:scale-125 mb-12">
-                    <PlayerCard player={revealedPlayer} size="lg" className={`${isLegend ? 'shadow-[0_0_100px_rgba(250,204,21,0.4)]' : 'shadow-[0_0_50px_rgba(255,255,255,0.1)]'}`} />
-                  </div>
-                  <button 
-                    onClick={() => { setRevealedPlayer(null); setOpening(null); stopAudio('PACK_OPEN'); playAudio('THEME', true); }}
-                    className="px-12 py-4 bg-white text-black font-black rounded-full hover:bg-zinc-200 transition-all text-xl shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:shadow-[0_0_50px_rgba(255,255,255,0.5)] hover:scale-105"
-                  >
-                    CONTINUE
-                  </button>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+            );
+          })}
+        </div>
+        <div style={{ maxWidth:1100, margin:'32px auto 0', padding:'16px 24px', background:'rgba(0,180,255,0.05)', border:'1px solid rgba(0,180,255,0.15)', borderRadius:12 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'rgba(0,180,255,0.7)', letterSpacing:'0.3em', marginBottom:8 }}>💡 MẸO</div>
+          <div style={{ fontSize:12, color:'rgba(255,255,255,0.5)', lineHeight:1.8 }}>• Bronze: OVR 55-72 &nbsp;|&nbsp; Silver: OVR 70-82 &nbsp;|&nbsp; Gold: OVR 80-92 &nbsp;|&nbsp; Legend: OVR 93-99<br />• Lucky Pack có xác suất nhận Gold cao hơn với giá ưu đãi</div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -201,6 +201,7 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
   const ballSpinRef=useRef(0);
   const shotChargeRef=useRef(0);
   const shotChargingRef=useRef(false);
+  const joystickStateRef=useRef({x:0,y:0,active:false});
 
   const gs=useRef({
     ball:{x:PW/2,y:PH/2,vx:0,vy:0},
@@ -405,7 +406,7 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
           if(keys.current['ArrowDown']||keys.current['KeyS'])my+=1;
           if(keys.current['ArrowLeft']||keys.current['KeyA'])mx-=1;
           if(keys.current['ArrowRight']||keys.current['KeyD'])mx+=1;
-          if(joystick.active&&(Math.abs(joystick.x)>5||Math.abs(joystick.y)>5)){mx=joystick.x/40;my=joystick.y/40;}
+          const jst=joystickStateRef.current; if(jst.active&&(Math.abs(jst.x)>5||Math.abs(jst.y)>5)){mx=jst.x/40;my=jst.y/40;}
           if(mouseTarget.current&&mx===0&&my===0){const dx=mouseTarget.current.x-p.x;const dy=mouseTarget.current.y-p.y;const d=Math.hypot(dx,dy);if(d>6){mx=dx/d;my=dy/d;}else mouseTarget.current=null;}
           if(mx!==0||my!==0){const mg=Math.hypot(mx,my);p.vx+=(mx/mg)*speed*0.22;p.vy+=(my/mg)*speed*0.22;p.dir=Math.atan2(my,mx);}
 
@@ -519,7 +520,7 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
     };
     raf=requestAnimationFrame(loop);
     return()=>cancelAnimationFrame(raf);
-  },[squad,half,uiState,difficulty,isPaused,joystick]);
+  },[squad,half,uiState,difficulty,isPaused]);
 
   const finalizeMatch=()=>{ playAudio('WHISTLE_END'); setMatchStats(prev=>{ const r={...prev.ratings}; if(score.A>score.B)Object.keys(r).forEach(id=>{r[id]=(r[id]||6.5)+0.8;}); return{...prev,ratings:r}; }); };
 
@@ -541,9 +542,9 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
     mouseTarget.current={x,y};
   };
   const onTouchCanvas=(e:React.TouchEvent<HTMLCanvasElement>)=>{ e.preventDefault(); const t=e.changedTouches[0];const rect=canvasRef.current?.getBoundingClientRect();if(!rect)return;const x=(t.clientX-rect.left)*(PW/rect.width);const y=(t.clientY-rect.top)*(PH/rect.height);if(gs.current.state==='PENALTIES'){const ps=gs.current.penState;if(ps.turn==='A'&&ps.phase==='aiming'){ps.shotTarget={x:PW,y};ps.phase='shooting';ps.timer=0;setPenState({...ps});}else if(ps.turn==='B'&&ps.phase==='saving'){ps.keeperDive={x:20,y};ps.shotTarget={x:0,y:(GOAL_Y1+GOAL_Y2)/2+(Math.random()-0.5)*100};ps.phase='shooting';ps.timer=0;setPenState({...ps});}return;}mouseTarget.current={x,y}; };
-  const joyStart=(e:React.TouchEvent)=>{e.preventDefault();const t=e.touches[0];joyRef.current={sx:t.clientX,sy:t.clientY};setJoystick({x:0,y:0,active:true});};
-  const joyMove=(e:React.TouchEvent)=>{e.preventDefault();if(!joyRef.current)return;const t=e.touches[0];const jx=Math.max(-42,Math.min(42,t.clientX-joyRef.current.sx));const jy=Math.max(-42,Math.min(42,t.clientY-joyRef.current.sy));setJoystick({x:jx,y:jy,active:true});};
-  const joyEnd=(e:React.TouchEvent)=>{e.preventDefault();joyRef.current=null;setJoystick({x:0,y:0,active:false});mouseTarget.current=null;};
+  const joyStart=(e:React.TouchEvent)=>{e.preventDefault();const t=e.touches[0];joyRef.current={sx:t.clientX,sy:t.clientY};const j={x:0,y:0,active:true};setJoystick(j);joystickStateRef.current=j;};
+  const joyMove=(e:React.TouchEvent)=>{e.preventDefault();if(!joyRef.current)return;const t=e.touches[0];const jx=Math.max(-42,Math.min(42,t.clientX-joyRef.current.sx));const jy=Math.max(-42,Math.min(42,t.clientY-joyRef.current.sy));const j={x:jx,y:jy,active:true};setJoystick(j);joystickStateRef.current=j;};
+  const joyEnd=(e:React.TouchEvent)=>{e.preventDefault();joyRef.current=null;const j={x:0,y:0,active:false};setJoystick(j);joystickStateRef.current=j;mouseTarget.current=null;};
 
   const getMVP=()=>{const e=Object.entries(matchStats.ratings).sort(([,a],[,b])=>b-a)[0];return e?squad.lineup.find(p=>p?.id===e[0]):null;};
 

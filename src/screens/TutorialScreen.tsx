@@ -1,258 +1,58 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Player } from '../types';
+import React, { useState } from 'react';
 
-interface Props {
-  onComplete: () => void;
-}
+interface Props { onComplete:()=>void; }
 
-const PITCH_W = 800;
-const PITCH_H = 500;
-const PLAYER_RADIUS = 12;
-const BALL_RADIUS = 6;
+const STEPS=[
+  {title:'Chào Mừng đến FC Online!',icon:'⚽',desc:'FC Online là game bóng đá quản lý câu lạc bộ. Bạn sẽ xây dựng đội bóng mơ ước, thi đấu và chinh phục các danh hiệu.',detail:'Hãy cùng tìm hiểu các tính năng cơ bản của game nhé!'},
+  {title:'Xây Dựng Đội Hình',icon:'👥',desc:'Vào mục "Đội Hình" để sắp xếp cầu thủ theo vị trí. Chọn đội hình phù hợp: 4-3-3, 4-4-2 hoặc 3-5-2.',detail:'Mỗi cầu thủ có chỉ số OVR – càng cao càng mạnh!'},
+  {title:'Mở Pack Cầu Thủ',icon:'🃏',desc:'Vào "Cửa Hàng" để mở các pack nhận cầu thủ mới. Bronze Pack giá rẻ, Legend Pack có xác suất nhận siêu sao.',detail:'Các loại thẻ: Bronze (nâu), Silver (bạc), Gold (vàng), Legend (tím)!'},
+  {title:'Thi Đấu',icon:'🥅',desc:'Chơi trận đấu 11vs11 thực chiến! WASD/Mũi tên để di chuyển, J để sút, K/X để chuyền bóng.',detail:'Mobile: Dùng joystick và các nút trên màn hình. Xoay ngang điện thoại để tốt nhất!'},
+  {title:'Nâng Cấp & Phát Triển',icon:'⚡',desc:'Chơi trận để kiếm XP và Coins. Dùng mục "Nâng Cấp" để tăng cấp cầu thủ, "Luyện Tập" để cải thiện chỉ số.',detail:'Champions League và World Cup cho thưởng nhiều coins hơn!'},
+  {title:'Bạn Đã Sẵn Sàng!',icon:'🏆',desc:'Hãy bắt đầu sự nghiệp quản lý bóng đá của bạn. Xây đội mạnh nhất, vô địch World Cup và trở thành HLV huyền thoại!',detail:'Nhận 800 coins thưởng cho việc hoàn thành hướng dẫn này!'},
+];
 
-export default function TutorialScreen({ onComplete }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [step, setStep] = useState<'WELCOME' | 'DRIBBLE' | 'SHOOT' | 'PASS' | 'COMPLETE'>('WELCOME');
-  const [message, setMessage] = useState("Welcome to the Training Ground!");
-  
-  const gameState = useRef({
-    player: { x: PITCH_W/2, y: PITCH_H/2, vx: 0, vy: 0 },
-    ball: { x: PITCH_W/2 + 20, y: PITCH_H/2, vx: 0, vy: 0 },
-    teammate: { x: PITCH_W - 100, y: PITCH_H/2 - 100, active: false },
-    target: { x: PITCH_W - 50, y: PITCH_H/2, active: false }, // Goal target
-    dribbleDist: 0,
-    hasBall: false
-  });
-
-  const mouseTarget = useRef<{x: number, y: number} | null>(null);
-  const keys = useRef<{ [key: string]: boolean }>({});
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { keys.current[e.code] = true; };
-    const handleKeyUp = (e: KeyboardEvent) => { keys.current[e.code] = false; };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (step === 'WELCOME') {
-      setMessage("Welcome Manager! Let's learn the basics. Click 'Start' to begin.");
-    } else if (step === 'DRIBBLE') {
-      setMessage("DRIBBLE: Click on the pitch to move your player. Cover some distance!");
-      gameState.current.dribbleDist = 0;
-    } else if (step === 'SHOOT') {
-      setMessage("SHOOTING: Dribble towards the goal (Right side) and press S to shoot!");
-      gameState.current.target.active = true;
-      gameState.current.teammate.active = false;
-    } else if (step === 'PASS') {
-      setMessage("PASSING: A teammate has appeared! Aim at them and press C to pass.");
-      gameState.current.target.active = false;
-      gameState.current.teammate.active = true;
-      // Reset positions
-      gameState.current.player.x = 100;
-      gameState.current.player.y = PITCH_H/2;
-      gameState.current.ball.x = 120;
-      gameState.current.ball.y = PITCH_H/2;
-      gameState.current.ball.vx = 0;
-      gameState.current.ball.vy = 0;
-    } else if (step === 'COMPLETE') {
-      setMessage("Training Complete! You are ready for your first match.");
-    }
-  }, [step]);
-
-  useEffect(() => {
-    let animationFrameId: number;
-    
-    const update = () => {
-      const state = gameState.current;
-      const { player, ball, teammate, target } = state;
-
-      // Player Movement
-      if (mouseTarget.current) {
-        const dx = mouseTarget.current.x - player.x;
-        const dy = mouseTarget.current.y - player.y;
-        const dist = Math.hypot(dx, dy);
-        
-        if (dist > 5) {
-          const angle = Math.atan2(dy, dx);
-          const speed = 4.5;
-          player.vx += Math.cos(angle) * speed * 0.15;
-          player.vy += Math.sin(angle) * speed * 0.15;
-        } else {
-          mouseTarget.current = null;
-        }
-      }
-
-      player.vx *= 0.94;
-      player.vy *= 0.94;
-      player.x += player.vx;
-      player.y += player.vy;
-
-      // Bounds
-      player.x = Math.max(PLAYER_RADIUS, Math.min(PITCH_W - PLAYER_RADIUS, player.x));
-      player.y = Math.max(PLAYER_RADIUS, Math.min(PITCH_H - PLAYER_RADIUS, player.y));
-
-      // Ball Physics
-      const distToBall = Math.hypot(ball.x - player.x, ball.y - player.y);
-      state.hasBall = distToBall < PLAYER_RADIUS + BALL_RADIUS + 5;
-
-      if (state.hasBall) {
-        // Dribble
-        const angle = Math.atan2(player.vy, player.vx) || 0;
-        ball.x = player.x + Math.cos(angle) * 20;
-        ball.y = player.y + Math.sin(angle) * 20;
-        ball.vx = player.vx;
-        ball.vy = player.vy;
-
-        if (step === 'DRIBBLE') {
-          state.dribbleDist += Math.hypot(player.vx, player.vy);
-          if (state.dribbleDist > 500) {
-            setStep('SHOOT');
-          }
-        }
-
-        // Shoot/Pass
-        if (keys.current['KeyS'] || keys.current['KeyC']) {
-          const shootAngle = Math.atan2(mouseTarget.current ? mouseTarget.current.y - player.y : player.vy, mouseTarget.current ? mouseTarget.current.x - player.x : player.vx || 1);
-          const power = 12;
-          ball.vx = Math.cos(shootAngle) * power;
-          ball.vy = Math.sin(shootAngle) * power;
-          state.hasBall = false;
-          keys.current['KeyS'] = false; 
-          keys.current['KeyC'] = false; // Debounce
-        }
-      } else {
-        ball.x += ball.vx;
-        ball.y += ball.vy;
-        ball.vx *= 0.98;
-        ball.vy *= 0.98;
-      }
-
-      // Check Goals/Passes
-      if (step === 'SHOOT' && ball.x > PITCH_W - 50 && Math.abs(ball.y - PITCH_H/2) < 100) {
-        setStep('PASS');
-      }
-
-      if (step === 'PASS' && teammate.active) {
-        const distToTeammate = Math.hypot(ball.x - teammate.x, ball.y - teammate.y);
-        if (distToTeammate < 30) {
-          setStep('COMPLETE');
-        }
-      }
-    };
-
-    const draw = (ctx: CanvasRenderingContext2D) => {
-      ctx.clearRect(0, 0, PITCH_W, PITCH_H);
-      
-      // Pitch
-      ctx.fillStyle = '#166534';
-      ctx.fillRect(0, 0, PITCH_W, PITCH_H);
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.strokeRect(50, 50, PITCH_W-100, PITCH_H-100);
-
-      const { player, ball, teammate, target } = gameState.current;
-
-      // Teammate
-      if (teammate.active) {
-        ctx.beginPath();
-        ctx.arc(teammate.x, teammate.y, PLAYER_RADIUS, 0, Math.PI*2);
-        ctx.fillStyle = '#2563eb';
-        ctx.fill();
-        ctx.fillStyle = 'white';
-        ctx.fillText('Teammate', teammate.x - 20, teammate.y - 15);
-      }
-
-      // Goal Target
-      if (target.active) {
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(PITCH_W, PITCH_H/2 - 50);
-        ctx.lineTo(PITCH_W, PITCH_H/2 + 50);
-        ctx.stroke();
-      }
-
-      // Player
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, PLAYER_RADIUS, 0, Math.PI*2);
-      ctx.fillStyle = '#10b981';
-      ctx.fill();
-      
-      // Ball
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2);
-      ctx.fillStyle = 'white';
-      ctx.fill();
-
-      // Mouse Target
-      if (mouseTarget.current) {
-        ctx.beginPath();
-        ctx.arc(mouseTarget.current.x, mouseTarget.current.y, 4, 0, Math.PI*2);
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fill();
-      }
-    };
-
-    const loop = () => {
-      update();
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) draw(ctx);
-      }
-      animationFrameId = requestAnimationFrame(loop);
-    };
-    loop();
-
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [step]);
-
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      mouseTarget.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      };
-    }
-  };
+export default function TutorialScreen({onComplete}:Props){
+  const [step,setStep]=useState(0);
+  const cur=STEPS[step];
+  const isLast=step===STEPS.length-1;
 
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-zinc-950 p-4">
-      <h2 className="text-3xl font-bold text-emerald-400 mb-4">TRAINING SESSION</h2>
-      <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 mb-4 text-center max-w-2xl">
-        <p className="text-xl text-white mb-2">{message}</p>
-        {step === 'WELCOME' && (
-          <button 
-            onClick={() => setStep('DRIBBLE')}
-            className="px-6 py-2 bg-emerald-600 text-white rounded-full font-bold hover:bg-emerald-500"
-          >
-            START TRAINING
-          </button>
-        )}
-        {step === 'COMPLETE' && (
-          <button 
-            onClick={onComplete}
-            className="px-6 py-2 bg-emerald-600 text-white rounded-full font-bold hover:bg-emerald-500 animate-pulse"
-          >
-            FINISH & CLAIM REWARD
-          </button>
-        )}
+    <div style={{height:'100%',display:'flex',flexDirection:'column',background:'#05080f',overflow:'hidden',fontFamily:"'Exo 2',sans-serif"}}>
+      {/* Progress */}
+      <div style={{padding:'16px 24px',borderBottom:'1px solid rgba(0,180,255,0.1)',display:'flex',alignItems:'center',gap:12}}>
+        <div style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:16,letterSpacing:3}}>📖 HƯỚNG DẪN</div>
+        <div style={{flex:1,height:4,background:'rgba(255,255,255,0.08)',borderRadius:99,overflow:'hidden'}}>
+          <div style={{height:'100%',borderRadius:99,background:'linear-gradient(90deg,#0066cc,#00b4ff)',width:`${((step+1)/STEPS.length)*100}%`,transition:'width 0.3s ease'}} />
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:'rgba(255,255,255,0.5)'}}>{step+1}/{STEPS.length}</div>
       </div>
-      
-      <canvas 
-        ref={canvasRef}
-        width={PITCH_W}
-        height={PITCH_H}
-        onClick={handleCanvasClick}
-        className="bg-green-800 rounded-lg shadow-2xl cursor-crosshair border-4 border-zinc-800"
-      />
-      
-      <div className="mt-4 text-zinc-500 text-sm">
-        Controls: Click to Move • S to Shoot • C to Pass
+
+      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,overflowY:'auto'}}>
+        <div style={{width:'100%',maxWidth:520,display:'flex',flexDirection:'column',gap:24,animation:'fadeSlideUp 0.35s ease'}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:80,marginBottom:16,filter:'drop-shadow(0 4px 20px rgba(0,0,0,0.5))'}}>{cur.icon}</div>
+            <h2 style={{fontFamily:"'Oxanium',sans-serif",fontWeight:800,fontSize:28,letterSpacing:3,marginBottom:12,color:'white'}}>{cur.title}</h2>
+          </div>
+          <div style={{background:'rgba(0,180,255,0.06)',border:'1px solid rgba(0,180,255,0.2)',borderRadius:16,padding:'20px 24px',fontSize:15,color:'rgba(255,255,255,0.85)',fontWeight:600,lineHeight:1.7}}>{cur.desc}</div>
+          <div style={{background:'rgba(255,205,60,0.05)',border:'1px solid rgba(255,205,60,0.2)',borderRadius:12,padding:'14px 18px',fontSize:13,color:'rgba(255,255,255,0.6)',fontWeight:600,display:'flex',gap:10,alignItems:'flex-start'}}>
+            <span style={{fontSize:16,flexShrink:0}}>💡</span>
+            <span>{cur.detail}</span>
+          </div>
+          {/* Step dots */}
+          <div style={{display:'flex',justifyContent:'center',gap:8}}>
+            {STEPS.map((_,i)=>(
+              <div key={i} onClick={()=>setStep(i)} style={{width:i===step?28:8,height:8,borderRadius:99,background:i<=step?'#00b4ff':'rgba(255,255,255,0.15)',transition:'all 0.3s',cursor:'pointer'}} />
+            ))}
+          </div>
+          <div style={{display:'flex',gap:12}}>
+            {step>0&&(
+              <button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:'12px 0',borderRadius:10,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.15)',color:'rgba(255,255,255,0.7)',fontWeight:800,fontSize:14,cursor:'pointer',letterSpacing:1}}>← TRƯỚC</button>
+            )}
+            <button onClick={isLast?onComplete:()=>setStep(s=>s+1)} style={{flex:2,padding:'14px 0',borderRadius:10,background:isLast?'linear-gradient(135deg,#0d8070,#00d4a0)':'linear-gradient(135deg,#0066cc,#00b4ff)',border:'none',color:isLast?'#001a14':'white',fontWeight:800,fontSize:15,cursor:'pointer',letterSpacing:2,boxShadow:isLast?'0 4px 20px rgba(0,212,160,0.4)':'0 4px 20px rgba(0,100,200,0.4)'}}>
+              {isLast?'✅ BẮT ĐẦU (+800 Coins)':'TIẾP THEO →'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

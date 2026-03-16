@@ -148,3 +148,22 @@
   transform:rotate(25deg) translateX(-120%);
   animation: cardShine 4s ease-in-out infinite; pointer-events:none;
 }
+
+/* ── Tailwind compatibility overrides ── */
+.bg-zinc-950, .bg-zinc-900 { background-color: rgba(5,8,15,0.95) !important; }
+.bg-zinc-800 { background-color: rgba(20,25,40,0.9) !important; }
+.border-zinc-800, .border-zinc-700 { border-color: rgba(0,180,255,0.15) !important; }
+.text-emerald-400, .text-emerald-500 { color: #00d4a0 !important; }
+.text-blue-400 { color: #00b4ff !important; }
+.bg-emerald-600 { background-color: #0d8070 !important; }
+.bg-emerald-500 { background-color: #00d4a0 !important; }
+.bg-blue-600 { background-color: #0066cc !important; }
+.hover\:bg-emerald-500:hover { background-color: #00c48a !important; }
+.hover\:bg-emerald-600:hover { background-color: #0a9070 !important; }
+.border-emerald-500 { border-color: #00d4a0 !important; }
+.text-yellow-500, .text-yellow-400 { color: #ffcd3c !important; }
+.from-emerald-400 { --tw-gradient-from: #00d4a0 !important; }
+.to-cyan-400 { --tw-gradient-to: #00b4ff !important; }
+
+/* Fix absolute positioning in screen containers */
+.absolute.inset-0 { position: absolute !important; inset: 0 !important; }

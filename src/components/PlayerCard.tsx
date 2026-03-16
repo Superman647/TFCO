@@ -15,7 +15,20 @@ function getBg(p:Player){
   return{bg:'linear-gradient(155deg,#b07a40,#6a3f18,#3a1e08)',border:'#c08040',shadow:'none'};
 }
 function statColor(v:number){if(v>=90)return'#00e676';if(v>=80)return'#69f0ae';if(v>=70)return'#ffcd3c';if(v>=60)return'#ff9800';return'#ff5252';}
-function getImg(p:Player){const id=SOFIFA[p.id];if(id&&id>0)return SF(id);return AV(p.name);}
+function getImg(p:Player){
+  const id=SOFIFA[p.id];
+  if(id&&id>0)return SF(id);
+  // Generate a football avatar with initials in jersey style
+  const abbr = p.name.split(' ').map((w:string)=>w[0]).join('').substring(0,2).toUpperCase();
+  const colors = {
+    SUPER_LEGENDARY:'7700cc/ffffff',
+    GOLD:'aa7700/ffffff',
+    SILVER:'446688/ffffff',
+    BRONZE:'884422/ffffff'
+  };
+  const col = (colors as Record<string,string>)[p.rarity]||'334466/ffffff';
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(abbr)}&background=${col.split('/')[0]}&color=${col.split('/')[1]}&size=128&bold=true&font-size=0.45&rounded=true`;
+}
 
 export default function PlayerCard({player:p,onClick,size='md',className='',selected}:Props){
   const {bg,border,shadow}=getBg(p);

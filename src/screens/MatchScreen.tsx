@@ -13,19 +13,17 @@ interface Props {
   socket?:any; matchId?:string; isHost?:boolean; opponentSquad?:Squad;
 }
 
-// ── World dimensions (centimetres)
+// ── World dimensions
 const PW = 1050, PH = 680;
 const GOAL_Y1 = 265, GOAL_Y2 = 415;
 const PR = 12, BALL_R = 7;
 const PLAYER_DAMP = 0.84, BALL_DAMP = 0.955, SPEED = 0.045;
 
-// ── Camera settings
-const CAM_OFFSET_Y  = PH * 0.32;   // camera sits this far behind the ball
-const CAM_LERP      = 0.07;        // smoothing speed
-const VISIBLE_RANGE = PH * 0.85;   // how much of the pitch is visible vertically
-const PERSP_NEAR    = 0.92;        // bottom of screen (y ratio)
-const PERSP_FAR     = 0.08;        // top of screen
-const PERSP_STRENGTH = 2.2;        // perspective intensity
+// ── Camera settings (only X tracking; perspective is fixed)
+const CAM_LERP  = 0.06;
+const HORIZON_Y = 0.13;  // horizon at 13% from top
+const PITCH_BOT = 0.93;  // near edge at 93% from top
+const PERSP_K   = 1.4;   // perspective strength (higher=more foreshortening)
 
 type Ent = {
   id:string; x:number; y:number; vx:number; vy:number;
@@ -48,28 +46,28 @@ const SOUNDS = {
   whistle:'https://assets.mixkit.co/active_storage/sfx/1003/1003-preview.mp3',
 };
 
-// ── PERSPECTIVE PROJECTION ────────────────────────────────────────────────────
-function worldToScreen(wx:number, wy:number, camX:number, camY:number, W:number, H:number) {
-  // wy relative to camera (negative = behind camera = off screen)
-  const relY = wy - camY;
-  const t    = (relY + VISIBLE_RANGE * 0.25) / VISIBLE_RANGE; // 0=far, 1=near
-  if(t < -0.1 || t > 1.15) return null;
-
-  const tc    = Math.max(0, Math.min(1, t));
-  const persp = 1 / (1 + (1 - tc) * PERSP_STRENGTH);
-  const halfW = W * 0.48 * persp;
-
-  const relX  = wx - camX;
-  const sx    = W * 0.5 + relX * persp;
-  const sy    = H * (PERSP_FAR + tc * (PERSP_NEAR - PERSP_FAR));
-
-  return { x:sx, y:sy, scale: persp * 1.6, t:tc };
+// ── PERSPECTIVE PROJECTION (fixed camera, pitch fills screen) ───────────────
+// wy=0 → far goal (horizon), wy=PH → near goal (user side, bottom)
+// Formula: t_screen = t / (t + PERSP_K*(1-t))  [0=far, 1=near]
+function worldToScreen(wx:number, wy:number, camX:number, _camY:number, W:number, H:number) {
+  const t  = Math.max(0, Math.min(1.02, wy / PH));
+  if(t < -0.02) return null;
+  // Perspective foreshortening
+  const ts = t / (t + PERSP_K * (1 - t));
+  const sy = H * (HORIZON_Y + (PITCH_BOT - HORIZON_Y) * ts);
+  // Horizontal: width scales with ts
+  const sx = W * 0.5 + (wx - camX) * ts * (W * 0.78) / PW;
+  const scale = Math.max(0.08, ts * 1.55);
+  return { x:sx, y:sy, scale, t:ts };
 }
 
 // ── GRASS DRAWING (perspective stripes) ──────────────────────────────────────
 function drawPitch3D(ctx:CanvasRenderingContext2D, W:number, H:number, camX:number, camY:number) {
+  // Dark background for any non-pitch area
+  ctx.fillStyle = '#1a1a20';
+  // (covered by grass below)
   // Draw horizontal stripes by projecting pitch Y slices
-  const STRIPES = 16;
+  const STRIPES = 20;
   for(let s=0; s<STRIPES; s++) {
     const y0 = s     / STRIPES * PH;
     const y1 = (s+1) / STRIPES * PH;
@@ -185,138 +183,204 @@ function drawGoal3D(ctx:CanvasRenderingContext2D, gx:number, camX:number, camY:n
   }
 }
 
-// ── PLAYER 3D ─────────────────────────────────────────────────────────────────
-function drawPlayer3D(ctx:CanvasRenderingContext2D, p:Ent, sx:number, sy:number, scale:number, isCtrl:boolean, posLabel:string) {
-  const S = scale * 28;
-  const kitColor = p.team === 'A' ? '#1565c0' : '#c62828';
-  const shortColor = p.team === 'A' ? '#0d3b86' : '#7a1010';
-  const skinColor  = '#d4a574';
+// ── PLAYER 3D (detailed figure with actions) ────────────────────────────────
+type PlayerState = 'idle'|'running'|'shooting'|'tackling'|'heading'|'celebrating';
 
-  // Ground shadow
+function drawPlayer3D(
+  ctx: CanvasRenderingContext2D,
+  p: Ent, sx: number, sy: number, scale: number,
+  isCtrl: boolean, posLabel: string,
+  action: PlayerState = 'idle'
+) {
+  const S = scale * 34;   // base unit — everything scales from this
+  if(S < 4) return;       // too small to draw
+  const isA = p.team === 'A';
+
+  // ── Kit colors
+  const KIT   = isA ? '#1565c0' : '#b71c1c';
+  const KIT2  = isA ? '#0d47a1' : '#7f0000';
+  const SHORT = isA ? '#0d3b86' : '#7a1010';
+  const SOCK  = '#ffffff';
+  const SKIN  = '#d4a574';
+  const SKIN2 = '#c49060';
+  const HAIR_COLORS = ['#1a1206','#4a2a0a','#e8c060','#1a1a1a','#c07820','#6a1010'];
+  const hairC = HAIR_COLORS[Math.abs(p.playerData.name.charCodeAt(0) + p.playerData.name.length) % HAIR_COLORS.length];
+
+  const moving  = Math.hypot(p.vx, p.vy) > 0.4;
+  const phase   = p.animPhase;
+  const sprint  = Math.hypot(p.vx, p.vy) > 1.2;
+
   ctx.save();
-  ctx.globalAlpha = 0.35;
+
+  // ── Ground shadow
+  ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.ellipse(sx, sy + S*0.08, S*0.55, S*0.15, 0, 0, Math.PI*2);
+  ctx.ellipse(sx, sy + S*0.05, S*0.52, S*0.14, 0, 0, Math.PI*2);
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // Animate walking (legs)
-  const phase = p.animPhase;
-  const legSwing = Math.sin(phase) * 0.3;
-  const moving = Math.hypot(p.vx,p.vy) > 0.3;
+  // ── TACKLE animation: horizontal lunge
+  if(action === 'tackling') {
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(-0.35);
+    // Body horizontal
+    ctx.fillStyle = KIT;
+    ctx.beginPath();
+    ctx.roundRect?.(-S*0.55, -S*0.35, S*1.1, S*0.4, S*0.08) ??
+      ctx.rect(-S*0.55, -S*0.35, S*1.1, S*0.4);
+    ctx.fill();
+    // Legs extended
+    ctx.fillStyle = SHORT;
+    ctx.fillRect(-S*0.55, S*0.0, S*1.1, S*0.22);
+    ctx.fillStyle = SOCK;
+    ctx.fillRect(-S*0.55, S*0.18, S*0.4, S*0.1);
+    ctx.fillRect(S*0.15, S*0.18, S*0.4, S*0.1);
+    // Head
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(S*0.45, -S*0.38, S*0.22, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = hairC;
+    ctx.beginPath(); ctx.arc(S*0.45, -S*0.45, S*0.22, Math.PI*1.1, Math.PI*2.1); ctx.fill();
+    ctx.restore();
+    // Skip normal drawing
+    drawPlayerLabel(ctx, p, sx, sy, S, isCtrl, posLabel, scale);
+    ctx.restore();
+    return;
+  }
 
-  // Left leg
-  ctx.fillStyle = shortColor;
+  // ── SHOOT animation: forward lean + raised leg
+  const isShoot = action === 'shooting';
+  const bodyTilt = isShoot ? 0.3 : sprint ? 0.12 : 0;
+  const kickLeg  = isShoot ? Math.PI*0.55 : 0;
+
+  // ── LEFT leg
+  const ll = moving ? Math.sin(phase)*0.45 : 0;
+  ctx.fillStyle = SHORT;
   ctx.save();
-  ctx.translate(sx - S*0.12, sy - S*0.05);
-  ctx.rotate(moving ? legSwing : 0);
-  ctx.fillRect(-S*0.08, 0, S*0.16, S*0.45);
-  // Sock (white)
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(-S*0.07, S*0.3, S*0.14, S*0.15);
+  ctx.translate(sx - S*0.12, sy - S*0.1);
+  ctx.rotate(isShoot ? -0.3 : ll);
+  ctx.fillRect(-S*0.09, 0, S*0.18, S*0.52);
+  ctx.fillStyle = SOCK;
+  ctx.fillRect(-S*0.08, S*0.36, S*0.16, S*0.18);
+  // Boot
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.ellipse(0, S*0.56, S*0.12, S*0.08, 0, 0, Math.PI*2);
+  ctx.fill();
   ctx.restore();
 
-  // Right leg
-  ctx.fillStyle = shortColor;
+  // ── RIGHT leg (kicking leg)
+  const rl = moving ? -Math.sin(phase)*0.45 : 0;
+  ctx.fillStyle = SHORT;
   ctx.save();
-  ctx.translate(sx + S*0.12, sy - S*0.05);
-  ctx.rotate(moving ? -legSwing : 0);
-  ctx.fillRect(-S*0.08, 0, S*0.16, S*0.45);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(-S*0.07, S*0.3, S*0.14, S*0.15);
+  ctx.translate(sx + S*0.12, sy - S*0.1);
+  ctx.rotate(isShoot ? kickLeg : rl);
+  ctx.fillRect(-S*0.09, 0, S*0.18, S*0.52);
+  ctx.fillStyle = SOCK;
+  ctx.fillRect(-S*0.08, S*0.36, S*0.16, S*0.18);
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.ellipse(0, S*0.56, S*0.12, S*0.08, 0, 0, Math.PI*2);
+  ctx.fill();
   ctx.restore();
 
-  // Body/jersey
-  const bodyGrd = ctx.createLinearGradient(sx-S*0.3, sy-S*1.05, sx+S*0.3, sy-S*0.1);
-  bodyGrd.addColorStop(0, lightenColor(kitColor, 50));
-  bodyGrd.addColorStop(1, kitColor);
+  // ── Body (jersey) — with number stripe
+  ctx.save();
+  ctx.translate(sx, sy - S*0.58);
+  ctx.rotate(bodyTilt);
+  const bodyGrd = ctx.createLinearGradient(-S*0.3, -S*0.5, S*0.3, S*0.1);
+  bodyGrd.addColorStop(0, lightenColor(KIT, 45));
+  bodyGrd.addColorStop(1, KIT2);
   ctx.fillStyle = bodyGrd;
   ctx.beginPath();
-  ctx.roundRect?.(sx - S*0.28, sy - S*1.05, S*0.56, S*0.62, S*0.1) ?? ctx.rect(sx-S*0.28, sy-S*1.05, S*0.56, S*0.62);
+  ctx.roundRect?.(-S*0.3, -S*0.42, S*0.6, S*0.58, S*0.08) ??
+    ctx.rect(-S*0.3, -S*0.42, S*0.6, S*0.58);
   ctx.fill();
-  // Jersey number stripe
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(sx-S*0.1, sy-S*0.7, S*0.2, S*0.08);
+  // Jersey collar
+  ctx.fillStyle = lightenColor(KIT, 60);
+  ctx.beginPath();
+  ctx.arc(0, -S*0.38, S*0.07, 0, Math.PI*2);
+  ctx.fill();
+  // Shirt number
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = `bold ${S*0.22}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText((p.playerData.ovr % 30 + 1).toString(), 0, 0);
+  ctx.restore();
 
-  // Neck
-  ctx.fillStyle = skinColor;
-  ctx.fillRect(sx - S*0.08, sy - S*1.15, S*0.16, S*0.14);
+  // ── Arms
+  const armSwing = moving ? Math.sin(phase)*0.35 : 0;
+  [[-1, -armSwing], [1, armSwing]].forEach(([side, swing]) => {
+    ctx.fillStyle = KIT;
+    ctx.save();
+    ctx.translate(sx + (side as number)*(S*0.34), sy - S*0.98);
+    ctx.rotate(swing as number);
+    ctx.fillRect(-S*0.08, 0, S*0.16, S*0.38);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(-S*0.07, S*0.3, S*0.14, S*0.12);
+    ctx.restore();
+  });
 
-  // Head
-  const headGrd = ctx.createRadialGradient(sx-S*0.05, sy-S*1.38, 0, sx, sy-S*1.3, S*0.22);
-  headGrd.addColorStop(0, lightenColor(skinColor, 30));
-  headGrd.addColorStop(1, skinColor);
+  // ── Neck
+  ctx.fillStyle = SKIN2;
+  ctx.fillRect(sx - S*0.08, sy - S*1.2, S*0.16, S*0.15);
+
+  // ── Head
+  const headBob = moving ? Math.sin(phase*2)*S*0.02 : 0;
+  const headY   = sy - S*1.42 + headBob + (isShoot ? -S*0.06 : 0);
+  const headGrd = ctx.createRadialGradient(sx - S*0.06, headY - S*0.06, 0, sx, headY, S*0.24);
+  headGrd.addColorStop(0, lightenColor(SKIN, 25));
+  headGrd.addColorStop(1, SKIN);
   ctx.fillStyle = headGrd;
+  ctx.beginPath(); ctx.arc(sx, headY, S*0.23, 0, Math.PI*2); ctx.fill();
+
+  // Hair
+  ctx.fillStyle = hairC;
   ctx.beginPath();
-  ctx.arc(sx, sy - S*1.3, S*0.22, 0, Math.PI*2);
+  ctx.arc(sx, headY - S*0.05, S*0.23, Math.PI*1.05, Math.PI*2.0);
   ctx.fill();
 
-  // Hair color based on player name
-  const hairColors = ['#1a1206','#8B4513','#DAA520','#2a1a1a','#cc8800'];
-  ctx.fillStyle = hairColors[Math.abs((p.playerData.name.charCodeAt(0)||65)) % hairColors.length];
-  ctx.beginPath();
-  ctx.arc(sx, sy - S*1.35, S*0.22, Math.PI, Math.PI*2);
-  ctx.fill();
+  // Eyes (when big enough)
+  if(S > 14) {
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(sx - S*0.08, headY - S*0.02, S*0.04, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + S*0.08, headY - S*0.02, S*0.04, 0, Math.PI*2); ctx.fill();
+  }
 
-  // Arms
-  ctx.fillStyle = kitColor;
-  ctx.save();
-  ctx.translate(sx - S*0.32, sy - S*0.95);
-  ctx.rotate(moving ? -legSwing*0.5 : -0.15);
-  ctx.fillRect(-S*0.08, 0, S*0.16, S*0.4);
-  ctx.fillStyle = skinColor; ctx.fillRect(-S*0.07, S*0.3, S*0.14, S*0.12);
-  ctx.restore();
-  ctx.fillStyle = kitColor;
-  ctx.save();
-  ctx.translate(sx + S*0.32, sy - S*0.95);
-  ctx.rotate(moving ? legSwing*0.5 : 0.15);
-  ctx.fillRect(-S*0.08, 0, S*0.16, S*0.4);
-  ctx.fillStyle = skinColor; ctx.fillRect(-S*0.07, S*0.3, S*0.14, S*0.12);
-  ctx.restore();
-
-  // Controlled player indicator: red downward triangle (like Image 3)
+  // ── Controlled triangle (red downward, like Image 3)
   if(isCtrl) {
     ctx.fillStyle = '#e53935';
+    const ty = headY - S*0.45;
     ctx.beginPath();
-    ctx.moveTo(sx, sy - S*1.7);
-    ctx.lineTo(sx - S*0.18, sy - S*1.95);
-    ctx.lineTo(sx + S*0.18, sy - S*1.95);
-    ctx.closePath(); ctx.fill();
-  }
-
-  // Name tag (like Image 3: "F. Ribéry" in white above player)
-  if(scale > 0.55) {
-    const shortName = p.playerData.name.split(' ').slice(-1)[0] || p.playerData.name;
-    const label = posLabel ? `${posLabel} ${shortName}` : shortName;
-    ctx.font = `bold ${Math.max(9, S*0.45)}px 'Exo 2',sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    const tw = ctx.measureText(label).width;
-    // bg pill
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath();
-    ctx.roundRect?.(sx - tw/2 - 3, sy - S*2.0 - 14, tw + 6, 15, 3) ?? ctx.rect(sx-tw/2-3, sy-S*2.0-14, tw+6, 15);
+    ctx.moveTo(sx, ty + S*0.18);
+    ctx.lineTo(sx - S*0.14, ty);
+    ctx.lineTo(sx + S*0.14, ty);
+    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(label, sx, sy - S*2.0);
   }
 
-  // OVR small badge
-  if(scale > 0.7) {
-    ctx.font = `bold ${Math.max(7,S*0.35)}px 'Exo 2',sans-serif`;
-    ctx.fillStyle = p.team==='A' ? '#60aaff' : '#ff7070';
-    ctx.fillText(p.playerData.ovr.toString(), sx, sy - S*2.15);
-  }
-
-  ctx.restore?.();
+  drawPlayerLabel(ctx, p, sx, sy, S, isCtrl, posLabel, scale);
+  ctx.restore();
 }
 
-function lightenColor(hex:string, amt:number): string {
-  const r = Math.min(255, parseInt(hex.slice(1,3),16)+amt);
-  const g = Math.min(255, parseInt(hex.slice(3,5),16)+amt);
-  const b = Math.min(255, parseInt(hex.slice(5,7),16)+amt);
-  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+function drawPlayerLabel(ctx: CanvasRenderingContext2D, p: Ent, sx: number, sy: number, S: number, isCtrl: boolean, posLabel: string, scale: number) {
+  if(scale < 0.45) return;
+  const shortName = p.playerData.name.split(' ').pop() || p.playerData.name;
+  const label = posLabel ? `${posLabel} ${shortName}` : shortName;
+  const labelY = sy - S * 1.9;
+  ctx.font = `bold ${Math.max(8, S * 0.38)}px 'Exo 2',sans-serif`;
+  ctx.textAlign = 'center';
+  const tw = ctx.measureText(label).width;
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.beginPath();
+  ctx.roundRect?.(sx - tw/2 - 4, labelY - 12, tw + 8, 14, 3) ??
+    ctx.rect(sx - tw/2 - 4, labelY - 12, tw + 8, 14);
+  ctx.fill();
+  ctx.fillStyle = isCtrl ? '#ffcd3c' : '#ffffff';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, sx, labelY);
 }
 
 // ── BALL 3D ──────────────────────────────────────────────────────────────────
@@ -498,10 +562,10 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
 
       // Smooth camera: follow controlled player / ball
       const ctrl=g.players.find(p=>p.id===ctrlId.current)||g.players.find(p=>p.team==='A');
-      const targetCamX = Math.max(PW*0.3, Math.min(PW*0.7, g.ball.x));
-      const targetCamY = Math.max(PH*0.3, Math.min(PH*0.7, g.ball.y + CAM_OFFSET_Y));
+      // Only track X; Y projection is fixed (wy=0 far, wy=PH near)
+      const targetCamX = Math.max(PW*0.25, Math.min(PW*0.75, g.ball.x));
       camRef.current.x += (targetCamX - camRef.current.x) * CAM_LERP;
-      camRef.current.y += (targetCamY - camRef.current.y) * CAM_LERP;
+      camRef.current.y = 0; // unused
 
       if(g.state==='PENALTIES'){
         const ps=g.penState;
@@ -660,15 +724,30 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
     const draw=(ctx:CanvasRenderingContext2D,W:number,H:number)=>{
       const g=gs.current;
       const camX=camRef.current.x;
-      const camY=camRef.current.y;
+      const camY=0; // not used in new projection
 
-      // Sky gradient at top
-      const sky=ctx.createLinearGradient(0,0,0,H*0.15);
-      sky.addColorStop(0,'#87CEEB');sky.addColorStop(1,'#c8e8f0');
-      ctx.fillStyle=sky;ctx.fillRect(0,0,W,H*0.15);
+      // Sky
+      const sky=ctx.createLinearGradient(0,0,0,H*HORIZON_Y*1.5);
+      sky.addColorStop(0,'#87CEEB'); sky.addColorStop(1,'#b0d8f0');
+      ctx.fillStyle=sky; ctx.fillRect(0,0,W,H*HORIZON_Y*1.5);
 
-      // Crowd/stadium behind far side (subtle)
-      ctx.fillStyle='rgba(40,35,30,0.6)';ctx.fillRect(0,H*0.08,W,H*0.1);
+      // Stadium stands (gradient band just below sky)
+      const standH = H * 0.12;
+      const standY = H * HORIZON_Y * 0.6;
+      const standGrd = ctx.createLinearGradient(0, standY, 0, standY+standH);
+      standGrd.addColorStop(0,'rgba(50,40,30,0.9)');
+      standGrd.addColorStop(0.5,'rgba(80,65,50,0.8)');
+      standGrd.addColorStop(1,'rgba(30,25,15,0.7)');
+      ctx.fillStyle=standGrd; ctx.fillRect(0,standY,W,standH);
+      // Crowd dots
+      ctx.save();
+      for(let ci=0;ci<80;ci++){
+        const cx2=Math.random()*W; const cy2=standY+Math.random()*standH*0.7;
+        const cr2=1+Math.random()*2;
+        ctx.fillStyle=`hsl(${Math.random()*360},60%,${40+Math.random()*30}%)`;
+        ctx.beginPath(); ctx.arc(cx2,cy2,cr2,0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
 
       // Pitch
       drawPitch3D(ctx,W,H,camX,camY);
@@ -693,7 +772,15 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
         if(!proj)return;
         const idx=parseInt(p.id.split('_')[1]||'0');
         const lbl=p.team==='A'?(POS_LABELS[idx]||''):(POS_LABELS_B[idx]||'');
-        drawPlayer3D(ctx,p,proj.x,proj.y,proj.scale,p.id===ctrlId.current&&p.team==='A',lbl);
+        // Determine action state
+        const nowMs = Date.now();
+        let pAction: PlayerState = 'idle';
+        if(Math.hypot(p.vx,p.vy) > 0.3) pAction = 'running';
+        if(p.lastKickTime && nowMs - p.lastKickTime < 350) {
+          const distB = Math.hypot(g.ball.x - p.x, g.ball.y - p.y);
+          pAction = distB > 60 ? 'tackling' : 'shooting';
+        }
+        drawPlayer3D(ctx,p,proj.x,proj.y,proj.scale,p.id===ctrlId.current&&p.team==='A',lbl,pAction);
       });
       if(!ballDrawn&&ballProj)drawBall3D(ctx,ballProj.x,ballProj.y,ballProj.scale,ballSpinRef.current);
 
@@ -756,16 +843,16 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
     const sx=(e.clientX-rect.left)*(canvasRef.current!.width/rect.width);
     const sy=(e.clientY-rect.top)*(canvasRef.current!.height/rect.height);
     const W=canvasRef.current!.width, H=canvasRef.current!.height;
-    const camX=camRef.current.x, camY=camRef.current.y;
-    // Inverse: find t from sy
-    const t=(sy/H-PERSP_FAR)/(PERSP_NEAR-PERSP_FAR);
-    if(t<0||t>1) return;
-    const persp=1/(1+(1-t)*PERSP_STRENGTH);
-    const relX=(sx-W*0.5)/persp;
-    const wx=relX+camX;
-    const relY=t*VISIBLE_RANGE-VISIBLE_RANGE*0.25;
-    const wy=relY+camY;
-    mouseTarget.current={x:Math.max(0,Math.min(PW,wx)), y:Math.max(0,Math.min(PH,wy))};
+    const camX=camRef.current.x;
+    // Inverse of new projection: ts from sy
+    const ts=(sy/H-HORIZON_Y)/(PITCH_BOT-HORIZON_Y);
+    if(ts<0.01||ts>1.05) return;
+    // t from ts: ts = t/(t+PERSP_K*(1-t)) → t = ts*PERSP_K/(PERSP_K - ts*(PERSP_K-1))
+    const t_world = ts*PERSP_K/(PERSP_K - ts*(PERSP_K-1));
+    const wy = Math.max(0,Math.min(PH, t_world*PH));
+    const wx_raw = (sx-W*0.5)/(ts*(W*0.78)/PW)+camX;
+    const wx = Math.max(0,Math.min(PW,wx_raw));
+    mouseTarget.current={x:wx, y:wy};
   };
 
   const joyStart=(e:React.TouchEvent)=>{e.preventDefault();const t=e.touches[0];joyRef.current={sx:t.clientX,sy:t.clientY};const j={x:0,y:0,active:true};setJoystick(j);joyStateRef.current=j;};
@@ -809,7 +896,7 @@ export default function MatchScreen({squad,onFinish,opponentName,userTeamName,fo
       <div style={{flex:1,position:'relative'}}>
         <canvas ref={canvasRef} width={1280} height={720}
           onClick={canvasClick}
-          onTouchEnd={e=>{e.preventDefault();const t=e.changedTouches[0];const rect=canvasRef.current?.getBoundingClientRect();if(!rect)return;const sx=(t.clientX-rect.left)*(1280/rect.width);const sy=(t.clientY-rect.top)*(720/rect.height);const W=1280,H=720;const t2=(sy/H-PERSP_FAR)/(PERSP_NEAR-PERSP_FAR);if(t2<0||t2>1)return;const persp=1/(1+(1-t2)*PERSP_STRENGTH);const wx=(sx-W*0.5)/persp+camRef.current.x;const wy=t2*VISIBLE_RANGE-VISIBLE_RANGE*0.25+camRef.current.y;mouseTarget.current={x:Math.max(0,Math.min(PW,wx)),y:Math.max(0,Math.min(PH,wy))};}}
+          onTouchEnd={e=>{e.preventDefault();const t=e.changedTouches[0];const rect=canvasRef.current?.getBoundingClientRect();if(!rect)return;const sx=(t.clientX-rect.left)*(1280/rect.width);const sy=(t.clientY-rect.top)*(720/rect.height);const W=1280,H=720;const ts2=(sy/H-HORIZON_Y)/(PITCH_BOT-HORIZON_Y);if(ts2<0.01||ts2>1.05)return;const tw=ts2*PERSP_K/(PERSP_K-ts2*(PERSP_K-1));const wy2=Math.max(0,Math.min(PH,tw*PH));const wx2=Math.max(0,Math.min(PW,(sx-W*0.5)/(ts2*(W*0.78)/PW)+camRef.current.x));mouseTarget.current={x:wx2,y:wy2};}}
           style={{width:'100%',height:'100%',objectFit:'cover',touchAction:'none',cursor:'crosshair',display:'block'}}
         />
 

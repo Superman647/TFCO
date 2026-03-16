@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -7,28 +7,107 @@
 }
 
 @layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    min-height: 100%;
+  }
+
   body {
-    @apply bg-zinc-950 text-white antialiased;
+    @apply bg-slate-950 text-white antialiased;
+    background-image: radial-gradient(circle at top, rgba(16,185,129,0.15), transparent 28%), linear-gradient(180deg, #071019 0%, #030712 100%);
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+
+  .bg-auth-stadium {
+    background-image:
+      radial-gradient(circle at top, rgba(16,185,129,0.28), transparent 26%),
+      linear-gradient(180deg, rgba(3,7,18,0.4), rgba(3,7,18,0.88)),
+      url('https://images.unsplash.com/photo-1575361204480-aadea25e6e68?q=80&w=2070&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
   }
 
   .bg-game-default {
-    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.8)), url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=2070&auto=format&fit=crop');
+    background-image:
+      radial-gradient(circle at top right, rgba(59,130,246,0.16), transparent 22%),
+      radial-gradient(circle at top left, rgba(16,185,129,0.18), transparent 25%),
+      linear-gradient(180deg, rgba(0,0,0,0.34), rgba(0,0,0,0.78)),
+      url('https://images.unsplash.com/photo-1547347298-4074fc3086f0?q=80&w=2069&auto=format&fit=crop');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
   }
 
   .bg-game-worldcup {
-    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.8)), url('https://images.unsplash.com/photo-1543351611-58f69d7c1781?q=80&w=2070&auto=format&fit=crop');
+    background-image:
+      radial-gradient(circle at top, rgba(250,204,21,0.18), transparent 25%),
+      linear-gradient(180deg, rgba(0,0,0,0.32), rgba(0,0,0,0.8)),
+      url('https://images.unsplash.com/photo-1517466787929-bc90951d0974?q=80&w=2070&auto=format&fit=crop');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
   }
 
   .bg-game-training {
-    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.8)), url('https://images.unsplash.com/photo-1517466787929-bc90951d0974?q=80&w=2070&auto=format&fit=crop');
+    background-image:
+      radial-gradient(circle at top left, rgba(14,165,233,0.18), transparent 25%),
+      linear-gradient(180deg, rgba(0,0,0,0.34), rgba(0,0,0,0.84)),
+      url('https://images.unsplash.com/photo-1552667466-07770ae110d0?q=80&w=2070&auto=format&fit=crop');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-[24px] border border-white/10 bg-zinc-950/55 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.35)];
+  }
+
+  .hero-shell {
+    @apply rounded-[32px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.76),rgba(3,7,18,0.88))] backdrop-blur-2xl shadow-[0_30px_80px_rgba(0,0,0,0.4)];
+  }
+
+  .ui-kicker {
+    @apply text-[11px] uppercase tracking-[0.28em] font-extrabold text-emerald-300/90;
+  }
+
+  .auth-input {
+    @apply w-full rounded-2xl bg-white/5 border border-white/10 px-4 py-4 text-white placeholder:text-zinc-500 outline-none transition-colors focus:border-emerald-400;
+  }
+
+  .primary-cta {
+    @apply inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-400 px-5 py-3 font-black text-slate-950 shadow-[0_18px_40px_rgba(16,185,129,0.28)] transition-all hover:brightness-110 hover:-translate-y-0.5;
+  }
+
+  .secondary-cta {
+    @apply inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10;
+  }
+
+  .mode-card {
+    @apply rounded-[26px] border border-white/10 p-5 md:p-6 text-left backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.28)] hover:-translate-y-1 transition-all;
+  }
+
+  .stat-chip {
+    @apply rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex flex-col gap-1 min-h-[76px];
+  }
+
+  .stat-chip span {
+    @apply text-[11px] uppercase tracking-[0.2em] text-zinc-400 font-semibold;
+  }
+
+  .stat-chip strong {
+    @apply text-lg font-black text-white tracking-tight;
+  }
+
+  .icon-btn {
+    @apply w-10 h-10 md:w-11 md:h-11 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center text-zinc-200 transition-colors hover:bg-white/10;
   }
 }

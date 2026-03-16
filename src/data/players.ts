@@ -1,6 +1,45 @@
 import { Player, Position, Rarity } from '../types';
 
-const getAvatar = (name: string) => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128&bold=true`;
+const PLAYER_IMAGES: Record<string, string> = {
+  'Pele': 'https://upload.wikimedia.org/wikipedia/commons/5/59/Pel%C3%A9_1960.png',
+  'Maradona': 'https://upload.wikimedia.org/wikipedia/commons/1/1c/Diego_Armando_Maradona_2017.jpg',
+  'Zidane': 'https://upload.wikimedia.org/wikipedia/commons/4/4b/Zinedine_Zidane_2013.jpg',
+  'Ronaldo R9': 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Ronaldo_2014.jpg',
+  'Maldini': 'https://upload.wikimedia.org/wikipedia/commons/3/39/Paolo_Maldini_2018.jpg',
+  'Yashin': 'https://upload.wikimedia.org/wikipedia/commons/8/8b/Lev_Yashin_1965.jpg',
+  'L. Messi': 'https://upload.wikimedia.org/wikipedia/commons/c/c1/Lionel_Messi_20180626.jpg',
+  'C. Ronaldo': 'https://upload.wikimedia.org/wikipedia/commons/8/8c/Cristiano_Ronaldo_2018.jpg',
+  'K. De Bruyne': 'https://upload.wikimedia.org/wikipedia/commons/9/99/Kevin_De_Bruyne_201807091.jpg',
+  'V. van Dijk': 'https://upload.wikimedia.org/wikipedia/commons/4/49/Virgil_van_Dijk_2018.jpg',
+  'T. Courtois': 'https://upload.wikimedia.org/wikipedia/commons/8/8f/Thibaut_Courtois_2018.jpg',
+  'K. Mbappe': 'https://upload.wikimedia.org/wikipedia/commons/a/a8/Kylian_Mbapp%C3%A9_2019.jpg',
+  'Neymar Jr': 'https://upload.wikimedia.org/wikipedia/commons/7/76/Neymar_2018.jpg',
+  'N. Kante': 'https://upload.wikimedia.org/wikipedia/commons/7/79/N%27Golo_Kant%C3%A9_2018.jpg',
+  'Marquinhos': 'https://upload.wikimedia.org/wikipedia/commons/3/30/Marquinhos_2018.jpg',
+  'Alisson': 'https://upload.wikimedia.org/wikipedia/commons/4/49/Alisson_Becker_2018.jpg',
+  'R. Lewandowski': 'https://upload.wikimedia.org/wikipedia/commons/8/85/Robert_Lewandowski_2019.jpg',
+  'L. Modric': 'https://upload.wikimedia.org/wikipedia/commons/8/8c/Luka_Modri%C4%87_2018.jpg',
+  'T. Kroos': 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Toni_Kroos_2018.jpg',
+  'Ruben Dias': 'https://upload.wikimedia.org/wikipedia/commons/f/f1/Ruben_Dias_2021.jpg',
+  'J. Cancelo': 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Jo%C3%A3o_Cancelo_2021.jpg',
+  'A. Davies': 'https://upload.wikimedia.org/wikipedia/commons/8/8a/Alphonso_Davies_2020.jpg',
+  'Casemiro': 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Casemiro_2018.jpg',
+  'M. Salah': 'https://upload.wikimedia.org/wikipedia/commons/2/22/Mohamed_Salah_2018.jpg',
+  'E. Haaland': 'https://upload.wikimedia.org/wikipedia/commons/9/90/Erling_Haaland_2023.jpg',
+  'Ederson': 'https://upload.wikimedia.org/wikipedia/commons/3/36/Ederson_2018.jpg',
+  'H. Kane': 'https://upload.wikimedia.org/wikipedia/commons/4/48/Harry_Kane_2018.jpg',
+  'Vini Jr.': 'https://upload.wikimedia.org/wikipedia/commons/7/71/Vinicius_Jr_2021.jpg',
+  'J. Bellingham': 'https://upload.wikimedia.org/wikipedia/commons/8/8f/Jude_Bellingham_2023.jpg',
+  'Pedri': 'https://upload.wikimedia.org/wikipedia/commons/e/e2/Pedri_2022.jpg',
+  'R. Araujo': 'https://upload.wikimedia.org/wikipedia/commons/8/8a/Ronald_Araujo_2022.jpg',
+  'E. Militao': 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Eder_Milit%C3%A3o_2023.jpg',
+  'M. ter Stegen': 'https://upload.wikimedia.org/wikipedia/commons/5/5e/Marc-Andre_ter_Stegen_2018.jpg',
+  'B. Silva': 'https://upload.wikimedia.org/wikipedia/commons/9/93/Bernardo_Silva_2018.jpg',
+  'S. Heung Min': 'https://upload.wikimedia.org/wikipedia/commons/9/90/Son_Heung-min_2022.jpg',
+  'A. Hakimi': 'https://upload.wikimedia.org/wikipedia/commons/b/b2/Achraf_Hakimi_2021.jpg'
+};
+
+const getAvatar = (name: string) => PLAYER_IMAGES[name] || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0f172a&color=fff&size=256&bold=true`;
 
 const NATIONS = ['AR', 'PT', 'BE', 'NL', 'FR', 'BR', 'IT', 'ES', 'DE', 'GB'];
 

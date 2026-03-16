@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Home, ShoppingBag, Users, Play, Trophy, Zap, LogOut, Globe, Dumbbell, Volume2, VolumeX, Target, Newspaper } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Home, ShoppingBag, Users, Play, Trophy, Zap, LogOut, Globe, Dumbbell, Volume2, VolumeX, Target, Newspaper, Shield, Gamepad2, Sparkles, ChevronRight, Swords } from 'lucide-react';
 import { Player, Squad, Difficulty } from './types';
 import { INITIAL_PLAYERS, getInitialSquad, generateStarterSquad } from './data/players';
 import StoreScreen from './screens/StoreScreen';
@@ -20,13 +20,20 @@ import { useAudio } from './contexts/AudioContext';
 
 type Tab = 'HOME' | 'SQUAD' | 'STORE' | 'MATCH' | 'UPGRADE' | 'ONLINE' | 'TRAIN' | 'MARKET' | 'TUTORIAL' | 'WORLDCUP' | 'PRACTICE' | 'LEAGUE' | 'NEWS' | 'INTERVIEW';
 
+const quickModes: { key: Tab; title: string; description: string; icon: React.ElementType; accent: string }[] = [
+  { key: 'MATCH', title: 'Exhibition Match', description: 'Đá ngay một trận giao hữu với nhịp độ nhanh, dễ vào trận.', icon: Swords, accent: 'from-emerald-500/20 to-cyan-500/10' },
+  { key: 'LEAGUE', title: 'Career League', description: 'Leo bảng xếp hạng, kiếm tiền thưởng và mở rộng đội hình.', icon: Trophy, accent: 'from-yellow-500/20 to-amber-500/10' },
+  { key: 'ONLINE', title: 'Online PvP', description: 'Đối đầu người chơi khác với điều khiển thời gian thực.', icon: Globe, accent: 'from-sky-500/20 to-indigo-500/10' },
+  { key: 'PRACTICE', title: 'Training Arena', description: 'Luyện rê bóng, chuyền và dứt điểm bằng bàn phím hoặc mobile.', icon: Target, accent: 'from-fuchsia-500/20 to-rose-500/10' },
+];
+
 export default function App() {
   const { playAudio, stopAudio, stopAll, setVolume, volume } = useAudio();
   const [username, setUsername] = useState<string | null>(null);
   const [teamName, setTeamName] = useState<string>('My Team');
-  const [teamLogo, setTeamLogo] = useState<string>('https://ui-avatars.com/api/?name=MT&background=random');
+  const [teamLogo, setTeamLogo] = useState<string>('https://ui-avatars.com/api/?name=MT&background=0f172a&color=22c55e');
   const [activeTab, setActiveTab] = useState<Tab>('HOME');
-  const [coins, setCoins] = useState(1000);
+  const [coins, setCoins] = useState(2500);
   const [tutorialCompleted, setTutorialCompleted] = useState(false);
   const [inventory, setInventory] = useState<Player[]>(INITIAL_PLAYERS.slice(0, 15));
   const [squad, setSquad] = useState<Squad>({
@@ -34,45 +41,51 @@ export default function App() {
     lineup: getInitialSquad(INITIAL_PLAYERS)
   });
   const [trophies, setTrophies] = useState<string[]>([]);
-
   const [lastMatchResult, setLastMatchResult] = useState<any>(null);
   const [leagueOpponent, setLeagueOpponent] = useState<string | null>(null);
   const [leagueDifficulty, setLeagueDifficulty] = useState<Difficulty>('MEDIUM');
+
+  const teamOvr = useMemo(() => {
+    const valid = squad.lineup.filter(Boolean) as Player[];
+    return valid.length ? Math.round(valid.reduce((sum, p) => sum + p.ovr, 0) / valid.length) : 0;
+  }, [squad]);
+
+  const attackScore = useMemo(() => {
+    const valid = squad.lineup.filter(Boolean) as Player[];
+    return valid.length ? Math.round(valid.reduce((sum, p) => sum + (p.stats.sho + p.stats.pac + p.stats.dri) / 3, 0) / valid.length) : 0;
+  }, [squad]);
+
+  const balanceScore = useMemo(() => {
+    const valid = squad.lineup.filter(Boolean) as Player[];
+    return valid.length ? Math.round(valid.reduce((sum, p) => sum + (p.stats.pas + p.stats.def + p.stats.phy) / 3, 0) / valid.length) : 0;
+  }, [squad]);
 
   const toggleMute = () => {
     if (volume > 0) {
       setVolume(0);
     } else {
       setVolume(0.3);
-      // Try to play theme if we are in a menu to ensure audio context is active
-      if (activeTab !== 'MATCH' && activeTab !== 'WORLDCUP') {
-         playAudio('THEME', true);
-      }
+      if (!['MATCH', 'WORLDCUP'].includes(activeTab)) playAudio('THEME', true);
     }
   };
 
-  // Audio Management
   useEffect(() => {
     if (!username) {
       stopAll();
       return;
     }
-
     if (activeTab === 'MATCH') {
       stopAudio('THEME');
       stopAudio('WORLDCUP_THEME');
-      // MatchScreen handles its own audio
     } else if (activeTab === 'WORLDCUP') {
       stopAudio('THEME');
-      // WorldCupScreen handles WORLDCUP_THEME
     } else {
       stopAudio('WORLDCUP_THEME');
-      stopAudio('MATCH_AMBIENT'); // Ensure match audio stops
+      stopAudio('MATCH_AMBIENT');
       playAudio('THEME', true);
     }
   }, [activeTab, username]);
 
-  // Load from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem('fcweb_user');
     if (savedUser) {
@@ -80,70 +93,56 @@ export default function App() {
       const data = localStorage.getItem(`fcweb_data_${savedUser}`);
       if (data) {
         const parsed = JSON.parse(data);
-        setCoins(parsed.coins);
-        setInventory(parsed.inventory);
-        if (parsed.squad && parsed.squad.formation) {
-          setSquad(parsed.squad);
-        } else {
-          setSquad({ formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
-        }
+        setCoins(parsed.coins ?? 2500);
+        setInventory(parsed.inventory ?? INITIAL_PLAYERS.slice(0, 15));
+        setSquad(parsed.squad?.formation ? parsed.squad : { formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
         if (parsed.teamName) setTeamName(parsed.teamName);
         if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
         if (parsed.trophies) setTrophies(parsed.trophies);
+        setTutorialCompleted(Boolean(parsed.tutorialCompleted));
       }
     }
   }, []);
 
-  // Save to localStorage
   useEffect(() => {
-    if (username) {
-      localStorage.setItem(`fcweb_data_${username}`, JSON.stringify({ 
-        coins, inventory, squad, teamName, teamLogo, tutorialCompleted, trophies 
-      }));
-    }
+    if (!username) return;
+    localStorage.setItem(`fcweb_data_${username}`, JSON.stringify({
+      coins, inventory, squad, teamName, teamLogo, tutorialCompleted, trophies
+    }));
   }, [coins, inventory, squad, teamName, teamLogo, username, tutorialCompleted, trophies]);
 
   const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const name = formData.get('username') as string;
-    const tName = formData.get('teamName') as string || 'My Team';
-    
-    if (name.trim()) {
-      setUsername(name.trim());
-      setTeamName(tName.trim());
-      setTeamLogo(`https://ui-avatars.com/api/?name=${encodeURIComponent(tName.trim())}&background=random`);
-      localStorage.setItem('fcweb_user', name.trim());
-      
-      // Load existing data if any
-      const data = localStorage.getItem(`fcweb_data_${name.trim()}`);
-      if (data) {
-        const parsed = JSON.parse(data);
-        setCoins(parsed.coins);
-        setInventory(parsed.inventory);
-        if (parsed.squad && parsed.squad.formation) {
-          setSquad(parsed.squad);
-        } else {
-          setSquad({ formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
-        }
-        if (parsed.teamName) setTeamName(parsed.teamName);
-        if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
-        if (parsed.trophies) setTrophies(parsed.trophies);
-        setTutorialCompleted(parsed.tutorialCompleted || false);
-      } else {
-        // Reset to default for new user
-        setCoins(1000);
-        setTrophies([]);
-        const starterPlayers = generateStarterSquad();
-        setInventory(starterPlayers);
-        setSquad({
-          formation: '4-3-3',
-          lineup: getInitialSquad(starterPlayers)
-        });
-        setTutorialCompleted(false);
-        setActiveTab('TUTORIAL');
-      }
+    const name = String(formData.get('username') || '').trim();
+    const tName = String(formData.get('teamName') || 'My Team').trim();
+    if (!name) return;
+
+    setUsername(name);
+    setTeamName(tName || 'My Team');
+    setTeamLogo(`https://ui-avatars.com/api/?name=${encodeURIComponent(tName || 'My Team')}&background=0f172a&color=22c55e&bold=true`);
+    localStorage.setItem('fcweb_user', name);
+
+    const data = localStorage.getItem(`fcweb_data_${name}`);
+    if (data) {
+      const parsed = JSON.parse(data);
+      setCoins(parsed.coins ?? 2500);
+      setInventory(parsed.inventory ?? INITIAL_PLAYERS.slice(0, 15));
+      setSquad(parsed.squad?.formation ? parsed.squad : { formation: '4-3-3', lineup: getInitialSquad(INITIAL_PLAYERS) });
+      if (parsed.teamName) setTeamName(parsed.teamName);
+      if (parsed.teamLogo) setTeamLogo(parsed.teamLogo);
+      if (parsed.trophies) setTrophies(parsed.trophies);
+      setTutorialCompleted(Boolean(parsed.tutorialCompleted));
+      return;
     }
+
+    const starterPlayers = generateStarterSquad();
+    setCoins(2500);
+    setTrophies([]);
+    setInventory(starterPlayers);
+    setSquad({ formation: '4-3-3', lineup: getInitialSquad(starterPlayers) });
+    setTutorialCompleted(false);
+    setActiveTab('TUTORIAL');
   };
 
   const handleLogout = () => {
@@ -152,143 +151,32 @@ export default function App() {
   };
 
   const getBackgroundClass = () => {
-    if (!username) return 'bg-game-default';
+    if (!username) return 'bg-auth-stadium';
     switch (activeTab) {
-      case 'WORLDCUP':
-        return 'bg-game-worldcup';
-      case 'TRAIN':
-        return 'bg-game-training';
-      default:
-        return 'bg-game-default';
+      case 'WORLDCUP': return 'bg-game-worldcup';
+      case 'TRAIN': return 'bg-game-training';
+      default: return 'bg-game-default';
     }
   };
 
-  if (!username) {
-    return (
-      <div className={`min-h-screen text-white flex items-center justify-center p-4 ${getBackgroundClass()}`}>
-        <div className="w-full max-w-md bg-zinc-900/80 backdrop-blur-xl p-8 rounded-2xl border border-zinc-800 shadow-2xl">
-          <div className="flex justify-center mb-8">
-            <Trophy className="w-16 h-16 text-emerald-500" />
-          </div>
-          <h1 className="text-4xl font-black italic text-center mb-2">FC WEB</h1>
-          <p className="text-zinc-400 text-center mb-8">Enter your manager name to start your career.</p>
-          
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <input 
-                type="text" 
-                name="username" 
-                placeholder="Manager Name" 
-                required
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors mb-4"
-              />
-              <input 
-                type="text" 
-                name="teamName" 
-                placeholder="Team Name (e.g. Dream FC)" 
-                required
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-            </div>
-            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors">
-              START CAREER
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   const handleMatchFinish = (reward: number, xpGains: Record<string, number>, scoreA?: number, scoreB?: number, stats?: any) => {
     setCoins(c => c + reward);
-    
-    // Update XP in Inventory
-    setInventory(prev => prev.map(p => {
-      if (xpGains[p.id]) {
-        return { ...p, xp: (p.xp || 0) + xpGains[p.id] };
-      }
-      return p;
-    }));
-    
-    // Update XP in Squad
-    setSquad(prev => ({
-      ...prev,
-      lineup: prev.lineup.map(p => {
-        if (p && xpGains[p.id]) {
-          return { ...p, xp: (p.xp || 0) + xpGains[p.id] };
-        }
-        return p;
-      })
-    }));
+    setInventory(prev => prev.map(p => xpGains[p.id] ? { ...p, xp: (p.xp || 0) + xpGains[p.id] } : p));
+    setSquad(prev => ({ ...prev, lineup: prev.lineup.map(p => p && xpGains[p.id] ? { ...p, xp: (p.xp || 0) + xpGains[p.id] } : p) }));
 
-    if (stats) {
-      setLastMatchResult(stats);
-      
-      // Update League Table if it was a league match
-      if (leagueOpponent) {
-        const saved = localStorage.getItem(`league_data_${teamName}`);
-        if (saved) {
-          const data = JSON.parse(saved);
-          const newTable = data.table.map((entry: any) => {
-            if (entry.isUser) {
-              const goalsFor = scoreA || 0;
-              const goalsAgainst = scoreB || 0;
-              let won = entry.won;
-              let drawn = entry.drawn;
-              let lost = entry.lost;
-              let points = entry.points;
+    const payload = stats || {
+      score: `${scoreA ?? 0}-${scoreB ?? 0}`,
+      opponent: leagueOpponent || 'Opponent',
+      isWinner: (scoreA ?? 0) > (scoreB ?? 0),
+      competition: leagueOpponent ? 'League Match' : 'Friendly'
+    };
+    setLastMatchResult(payload);
 
-              if (goalsFor > goalsAgainst) { won++; points += 3; }
-              else if (goalsFor === goalsAgainst) { drawn++; points += 1; }
-              else { lost++; }
-
-              return {
-                ...entry,
-                played: entry.played + 1,
-                won, drawn, lost,
-                gf: entry.gf + goalsFor,
-                ga: entry.ga + goalsAgainst,
-                points
-              };
-            }
-            return entry;
-          }).sort((a: any, b: any) => {
-            if (b.points !== a.points) return b.points - a.points;
-            return (b.gf - b.ga) - (a.gf - a.ga);
-          });
-          
-          localStorage.setItem(`league_data_${teamName}`, JSON.stringify({
-            ...data,
-            table: newTable,
-            matchDay: data.matchDay + 1
-          }));
-        }
-      }
-      
-      if (leagueOpponent && leagueDifficulty === 'HARD') {
-         setActiveTab('INTERVIEW');
-      } else {
-         setLeagueOpponent(null);
-         setActiveTab('HOME');
-      }
+    if (leagueOpponent && leagueDifficulty === 'HARD') {
+      setActiveTab('INTERVIEW');
     } else {
-      // Fallback if stats not provided but we have scores
-      if (scoreA !== undefined && scoreB !== undefined) {
-        setLastMatchResult({
-          score: `${scoreA}-${scoreB}`,
-          opponent: leagueOpponent || 'Opponent',
-          isWinner: scoreA > scoreB
-        });
-        if (leagueOpponent && leagueDifficulty === 'HARD') {
-           setActiveTab('INTERVIEW');
-        } else {
-           setLeagueOpponent(null);
-           setActiveTab('HOME');
-        }
-      } else {
-        setLeagueOpponent(null);
-        setActiveTab('HOME');
-      }
+      setLeagueOpponent(null);
+      setActiveTab('HOME');
     }
   };
 
@@ -303,18 +191,13 @@ export default function App() {
     };
     const savedNews = localStorage.getItem('fcweb_news');
     const news = savedNews ? JSON.parse(savedNews) : [];
-    const updatedNews = [newItem, ...news].slice(0, 20);
-    localStorage.setItem('fcweb_news', JSON.stringify(updatedNews));
+    localStorage.setItem('fcweb_news', JSON.stringify([newItem, ...news].slice(0, 20)));
   };
 
   const renderTab = () => {
     switch (activeTab) {
       case 'TUTORIAL':
-        return <TutorialScreen onComplete={() => {
-          setTutorialCompleted(true);
-          setCoins(c => c + 500); // Bonus for tutorial
-          setActiveTab('HOME');
-        }} />;
+        return <TutorialScreen onComplete={() => { setTutorialCompleted(true); setCoins(c => c + 500); setActiveTab('HOME'); }} />;
       case 'STORE':
         return <StoreScreen coins={coins} setCoins={setCoins} inventory={inventory} setInventory={setInventory} />;
       case 'SQUAD':
@@ -324,172 +207,165 @@ export default function App() {
       case 'TRAIN':
         return <TrainScreen inventory={inventory} setInventory={setInventory} coins={coins} setCoins={setCoins} />;
       case 'MARKET':
-        return <TransferMarketScreen coins={coins} onBuy={(player, cost) => {
-          setCoins(c => c - cost);
-          setInventory(inv => [...inv, player]);
-        }} />;
+        return <TransferMarketScreen coins={coins} onBuy={(player, cost) => { setCoins(c => c - cost); setInventory(inv => [...inv, player]); }} />;
       case 'MATCH':
-        return <MatchScreen 
-          squad={squad} 
-          onFinish={handleMatchFinish} 
-          opponentName={leagueOpponent || undefined} 
-          forcedDifficulty={leagueOpponent ? leagueDifficulty : undefined}
-        />;
+        return <MatchScreen squad={squad} onFinish={handleMatchFinish} opponentName={leagueOpponent || undefined} forcedDifficulty={leagueOpponent ? leagueDifficulty : undefined} userTeamName={teamName} />;
       case 'ONLINE':
-        return <OnlineScreen username={username} squad={squad} onMatchComplete={handleMatchFinish} />;
+        return <OnlineScreen username={username!} squad={squad} onMatchComplete={handleMatchFinish} />;
       case 'WORLDCUP':
-        return <WorldCupScreen 
-          onBack={() => setActiveTab('HOME')} 
-          onWin={() => {
-            addNews("World Cup Glory!", `${teamName} has won the World Cup after a thrilling final!`, 'ACHIEVEMENT');
-            setTrophies(prev => [...prev, 'World Cup']);
-          }} 
-          onMatchComplete={(coins, xp, scoreA, scoreB, round) => {
-            setCoins(c => c + coins);
-            // Update XP
-            setInventory(prev => prev.map(p => xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p));
-            setSquad(prev => ({
-              ...prev,
-              lineup: prev.lineup.map(p => p && xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p)
-            }));
-            
-            // Check if interview is needed
-            if (round && ['R16', 'QF', 'SF', 'FINAL'].includes(round)) {
-               setLastMatchResult({
-                 score: `${scoreA}-${scoreB}`,
-                 opponent: 'World Cup Opponent',
-                 isWinner: (scoreA || 0) > (scoreB || 0),
-                 competition: 'World Cup ' + round,
-                 returnTab: 'WORLDCUP'
-               });
-               setActiveTab('INTERVIEW');
-            }
-          }} 
-        />;
+        return <WorldCupScreen onBack={() => setActiveTab('HOME')} onWin={() => { addNews('World Cup Glory!', `${teamName} has won the World Cup after a thrilling final!`, 'ACHIEVEMENT'); setTrophies(prev => [...prev, 'World Cup']); }} onMatchComplete={(c, xp, scoreA, scoreB, round) => {
+          setCoins(prev => prev + c);
+          setInventory(prev => prev.map(p => xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p));
+          setSquad(prev => ({ ...prev, lineup: prev.lineup.map(p => p && xp[p.id] ? { ...p, xp: (p.xp || 0) + xp[p.id] } : p) }));
+          if (round && ['R16', 'QF', 'SF', 'FINAL'].includes(round)) {
+            setLastMatchResult({ score: `${scoreA}-${scoreB}`, opponent: 'World Cup Opponent', isWinner: (scoreA || 0) > (scoreB || 0), competition: `World Cup ${round}`, returnTab: 'WORLDCUP' });
+            setActiveTab('INTERVIEW');
+          }
+        }} />;
       case 'PRACTICE':
         return <PracticeScreen squad={squad} onBack={() => setActiveTab('HOME')} />;
       case 'LEAGUE':
-        return <LeagueScreen teamName={teamName} onBack={() => setActiveTab('HOME')} onStartMatch={(opponent, diff) => {
-          setLeagueOpponent(opponent);
-          setLeagueDifficulty(diff);
-          setActiveTab('MATCH');
-        }} />;
+        return <LeagueScreen teamName={teamName} onBack={() => setActiveTab('HOME')} onStartMatch={(opponent, diff) => { setLeagueOpponent(opponent); setLeagueDifficulty(diff); setActiveTab('MATCH'); }} />;
       case 'NEWS':
         return <NewsScreen onBack={() => setActiveTab('HOME')} />;
       case 'INTERVIEW':
-        return <InterviewScreen 
-          matchResult={{
-            score: lastMatchResult?.score || '0-0',
-            opponent: lastMatchResult?.opponent || 'Opponent',
-            competition: lastMatchResult?.competition || (leagueOpponent ? 'Champions League' : 'Friendly'),
-            isWinner: lastMatchResult?.isWinner || false,
-            playerPerformance: 'The team showed great spirit on the pitch today.'
-          }} 
-          onFinish={(summary) => {
-            if (summary) {
-              addNews("Manager Speaks Out", summary, 'INTERVIEW');
-            }
-            setLeagueOpponent(null);
-            if (lastMatchResult?.returnTab) {
-               setActiveTab(lastMatchResult.returnTab);
-            } else {
-               setActiveTab('HOME');
-            }
-          }} 
-        />;
+        return <InterviewScreen matchResult={{ score: lastMatchResult?.score || '0-0', opponent: lastMatchResult?.opponent || 'Opponent', competition: lastMatchResult?.competition || 'Post Match', isWinner: Boolean(lastMatchResult?.isWinner), playerPerformance: 'Đội bóng duy trì nhịp độ tốt và tạo ra nhiều khoảnh khắc đáng chú ý.' }} onFinish={(summary) => {
+          if (summary) addNews('Manager Speaks Out', summary, 'INTERVIEW');
+          setLeagueOpponent(null);
+          setActiveTab(lastMatchResult?.returnTab || 'HOME');
+        }} />;
       case 'HOME':
       default:
         return (
-          <div className="flex flex-col items-center justify-center h-full space-y-8 p-4 overflow-y-auto">
-            <div className="text-center mb-8 mt-8">
-              <h2 className="text-xl text-zinc-400 font-medium mb-2">Welcome back,</h2>
-              <h1 className="text-6xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                {username.toUpperCase()}
-              </h1>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl">
-              <DailyChest onClaim={(rewardCoins, rewardPlayer) => {
-                setCoins(c => c + rewardCoins);
-                setInventory(inv => [...inv, rewardPlayer]);
-              }} />
+          <div className="p-4 md:p-6 xl:p-8 overflow-y-auto">
+            <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
+              <section className="hero-shell p-6 md:p-8 xl:p-10">
+                <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6 items-stretch">
+                  <div className="space-y-5">
+                    <div className="ui-kicker">Ultimate football club</div>
+                    <h1 className="text-4xl md:text-6xl font-black leading-none tracking-tight max-w-3xl">
+                      Xây dựng đội bóng theo phong cách <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-cyan-300">console football</span> với giao diện hiện đại hơn.
+                    </h1>
+                    <p className="text-zinc-300 max-w-2xl text-sm md:text-base leading-7">
+                      Mình đã đẩy phần giao diện theo hướng đậm chất game bóng đá: dashboard dạng thẻ, chỉ số đội hình rõ hơn, cảm giác menu hiện đại hơn và sẵn sàng cho cả PC lẫn mobile.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      <button onClick={() => setActiveTab('MATCH')} className="primary-cta">
+                        <Play className="w-5 h-5" />
+                        Vào trận ngay
+                      </button>
+                      <button onClick={() => setActiveTab('SQUAD')} className="secondary-cta">
+                        <Users className="w-5 h-5" />
+                        Chỉnh đội hình
+                      </button>
+                    </div>
+                    <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                      <div className="stat-chip"><span>Team OVR</span><strong>{teamOvr}</strong></div>
+                      <div className="stat-chip"><span>Attack</span><strong>{attackScore}</strong></div>
+                      <div className="stat-chip"><span>Balance</span><strong>{balanceScore}</strong></div>
+                    </div>
+                  </div>
+                  <div className="glass-panel p-5 md:p-6 flex flex-col justify-between">
+                    <div>
+                      <div className="ui-kicker mb-3">Club snapshot</div>
+                      <div className="flex items-center gap-4">
+                        <img src={teamLogo} alt={teamName} className="w-16 h-16 rounded-2xl border border-white/15 object-cover" />
+                        <div>
+                          <div className="text-2xl font-black">{teamName}</div>
+                          <div className="text-zinc-400 text-sm">Manager: {username}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-5">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="text-zinc-400 text-xs uppercase tracking-[0.2em]">Formation</div>
+                        <div className="text-2xl font-black mt-2">{squad.formation}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="text-zinc-400 text-xs uppercase tracking-[0.2em]">Trophies</div>
+                        <div className="text-2xl font-black mt-2">{trophies.length}</div>
+                      </div>
+                    </div>
+                    <div className="mt-5 rounded-2xl border border-emerald-400/15 bg-emerald-500/10 p-4 text-sm text-emerald-100 leading-6">
+                      PC: dùng <strong>WASD</strong> để di chuyển, <strong>S</strong> để sút, <strong>C</strong> để chuyền, <strong>Shift</strong> để tăng tốc. Mobile có joystick và phím nổi ngay trên sân.
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-              <button onClick={() => setActiveTab('LEAGUE')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Trophy className="w-12 h-12 text-emerald-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Champions League</h2>
-                <p className="text-zinc-400 text-sm">Climb the league table and win the title.</p>
-              </button>
+              <section className="grid xl:grid-cols-[1.15fr_0.85fr] gap-6">
+                <div className="space-y-6">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {quickModes.map((mode) => {
+                      const Icon = mode.icon;
+                      return (
+                        <button key={mode.key} onClick={() => setActiveTab(mode.key)} className={`mode-card bg-gradient-to-br ${mode.accent}`}>
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="ui-kicker mb-2">Game mode</div>
+                              <h3 className="text-2xl font-black">{mode.title}</h3>
+                              <p className="text-zinc-300 text-sm mt-2 leading-6">{mode.description}</p>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl border border-white/15 bg-white/10 flex items-center justify-center shrink-0">
+                              <Icon className="w-6 h-6" />
+                            </div>
+                          </div>
+                          <div className="inline-flex items-center gap-2 text-emerald-300 text-sm font-semibold mt-6">Mở chế độ <ChevronRight className="w-4 h-4" /></div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-              <button onClick={() => setActiveTab('NEWS')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Newspaper className="w-12 h-12 text-emerald-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Football News</h2>
-                <p className="text-zinc-400 text-sm">Stay updated with the latest headlines.</p>
-              </button>
+                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {[
+                      ['SQUAD', 'Đội hình', 'Sắp xếp XI chính, thay người, cân đội hình.', Users],
+                      ['STORE', 'Store', 'Mở pack và tìm cầu thủ chất lượng cao.', ShoppingBag],
+                      ['MARKET', 'Market', 'Săn cầu thủ phù hợp chiến thuật đội bóng.', Globe],
+                      ['UPGRADE', 'Upgrade', 'Nâng cấp thẻ, tăng độ bá của đội hình.', Zap],
+                      ['TRAIN', 'Training', 'Rèn stat theo mục tiêu rõ ràng hơn.', Dumbbell],
+                      ['NEWS', 'News', 'Theo dõi tin tức và thành tích gần đây.', Newspaper],
+                    ].map(([tab, title, desc, Icon]: any) => (
+                      <button key={tab} onClick={() => setActiveTab(tab)} className="glass-panel p-5 text-left hover:-translate-y-0.5 transition-transform">
+                        <Icon className="w-7 h-7 text-emerald-300 mb-4" />
+                        <h3 className="text-xl font-black">{title}</h3>
+                        <p className="text-sm text-zinc-400 mt-2 leading-6">{desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <button onClick={() => setActiveTab('WORLDCUP')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-yellow-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Globe className="w-12 h-12 text-yellow-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">World Cup</h2>
-                <p className="text-zinc-400 text-sm">Lead your nation to glory.</p>
-              </button>
-
-              <button onClick={() => setActiveTab('MATCH')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Play className="w-12 h-12 text-emerald-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Play Match</h2>
-                <p className="text-zinc-400 text-sm">Control your team in a 5v5 match.</p>
-              </button>
-              
-              <button onClick={() => setActiveTab('ONLINE')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-blue-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Globe className="w-12 h-12 text-blue-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Online Multiplayer</h2>
-                <p className="text-zinc-400 text-sm">Challenge other managers.</p>
-              </button>
-
-              <button onClick={() => setActiveTab('SQUAD')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-blue-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Users className="w-12 h-12 text-blue-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Club Squad</h2>
-                <p className="text-zinc-400 text-sm">Manage your starting lineup.</p>
-              </button>
-              
-              <button onClick={() => setActiveTab('STORE')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-purple-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <ShoppingBag className="w-12 h-12 text-purple-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Store</h2>
-                <p className="text-zinc-400 text-sm">Open packs to get new players.</p>
-              </button>
-
-              <button onClick={() => setActiveTab('MARKET')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-blue-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Globe className="w-12 h-12 text-blue-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Transfer Market</h2>
-                <p className="text-zinc-400 text-sm">Buy and sell players.</p>
-              </button>
-
-              <button onClick={() => setActiveTab('UPGRADE')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-yellow-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Zap className="w-12 h-12 text-yellow-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Upgrade</h2>
-                <p className="text-zinc-400 text-sm">Level up your players' stats.</p>
-              </button>
-
-              <button onClick={() => setActiveTab('TRAIN')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Dumbbell className="w-12 h-12 text-emerald-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Training Center</h2>
-                <p className="text-zinc-400 text-sm">Train individual stats over time.</p>
-              </button>
-
-              <button onClick={() => setActiveTab('PRACTICE')} className="group relative overflow-hidden rounded-2xl bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-8 hover:border-emerald-500 transition-colors">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <Target className="w-12 h-12 text-emerald-400 mb-4" />
-                <h2 className="text-2xl font-bold text-white mb-2">Practice Mode</h2>
-                <p className="text-zinc-400 text-sm">Practice dribbling, shooting, and penalties.</p>
-              </button>
+                <div className="space-y-6">
+                  <DailyChest onClaim={(rewardCoins, rewardPlayer) => { setCoins(c => c + rewardCoins); setInventory(inv => [...inv, rewardPlayer]); }} />
+                  <div className="glass-panel p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-400/20 flex items-center justify-center"><Gamepad2 className="w-5 h-5 text-cyan-300" /></div>
+                      <div>
+                        <div className="ui-kicker">Gameplay direction</div>
+                        <h3 className="text-xl font-black">Tối ưu PC & Mobile</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-3 text-sm text-zinc-300 leading-7">
+                      <p>Điều khiển bàn phím đã giữ kiểu arcade rõ ràng hơn, trong khi mobile dùng joystick ảo và nút hành động lớn để thao tác dễ hơn.</p>
+                      <p>Toàn bộ menu, header, dashboard và thẻ cầu thủ đã được làm lại theo hướng đậm chất game bóng đá online hiện đại.</p>
+                    </div>
+                  </div>
+                  <div className="glass-panel p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-2xl bg-yellow-500/10 border border-yellow-400/20 flex items-center justify-center"><Sparkles className="w-5 h-5 text-yellow-300" /></div>
+                      <div>
+                        <div className="ui-kicker">Visual refresh</div>
+                        <h3 className="text-xl font-black">Đồ họa giao diện mới</h3>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="stat-chip"><span>Menu</span><strong>Glass UI</strong></div>
+                      <div className="stat-chip"><span>Cards</span><strong>Player Photos</strong></div>
+                      <div className="stat-chip"><span>Pitch</span><strong>Mobile HUD</strong></div>
+                      <div className="stat-chip"><span>UX</span><strong>Responsive</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         );
@@ -498,42 +374,70 @@ export default function App() {
 
   const isMatchTab = ['MATCH', 'WORLDCUP', 'ONLINE', 'PRACTICE', 'TRAIN'].includes(activeTab);
 
+  if (!username) {
+    return (
+      <div className={`min-h-screen text-white flex items-center justify-center p-4 ${getBackgroundClass()}`}>
+        <div className="w-full max-w-5xl grid lg:grid-cols-[1.05fr_0.95fr] rounded-[28px] overflow-hidden border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.45)]">
+          <div className="p-8 md:p-12 bg-[linear-gradient(180deg,rgba(5,10,15,0.55),rgba(5,10,15,0.88))] backdrop-blur-md">
+            <div className="ui-kicker mb-4">Next-gen football experience</div>
+            <h1 className="text-4xl md:text-6xl font-black leading-none tracking-tight max-w-xl">Khởi đầu sự nghiệp HLV với giao diện bóng đá hiện đại hơn.</h1>
+            <p className="text-zinc-300 mt-5 max-w-xl leading-7">
+              Giao diện đăng nhập được làm lại theo phong cách sân vận động ban đêm, nhấn mạnh cảm giác premium và gần hơn với các game bóng đá online hiện đại.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-3 mt-8">
+              <div className="stat-chip"><span>UI</span><strong>Stadium Intro</strong></div>
+              <div className="stat-chip"><span>Controls</span><strong>PC + Mobile</strong></div>
+              <div className="stat-chip"><span>Cards</span><strong>Photo Ready</strong></div>
+            </div>
+          </div>
+          <div className="p-8 md:p-10 bg-zinc-950/90 backdrop-blur-xl">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-400/20 flex items-center justify-center">
+                <Shield className="w-8 h-8 text-emerald-300" />
+              </div>
+              <div>
+                <div className="ui-kicker">Club access</div>
+                <div className="text-3xl font-black">Ultimate Club</div>
+              </div>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input type="text" name="username" placeholder="Tên HLV" required className="auth-input" />
+              <input type="text" name="teamName" placeholder="Tên CLB" required className="auth-input" />
+              <button type="submit" className="primary-cta w-full justify-center py-4 text-base">
+                <Play className="w-5 h-5" />
+                Bắt đầu sự nghiệp
+              </button>
+            </form>
+            <div className="mt-6 text-sm text-zinc-400 leading-6">
+              Mục tiêu lần chỉnh này là tạo phiên bản mang cảm giác gần với game bóng đá online nổi tiếng ở phần bố cục, nhịp điều hướng và độ bóng bẩy của UI, nhưng vẫn giữ tài nguyên an toàn để bạn tiếp tục phát triển.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen text-white font-sans flex flex-col ${getBackgroundClass()}`}>
-      {/* Header */}
-      <header className={`h-16 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-50 ${isMatchTab ? 'hidden md:flex' : 'flex'}`}>
-        <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setActiveTab('HOME')}>
-          <img src={teamLogo} alt="Team Logo" className="w-8 h-8 rounded-full border border-zinc-700" />
-          <span className="text-xl font-bold italic tracking-wider hidden sm:block">{teamName}</span>
-          {trophies.length > 0 && (
-            <div className="flex items-center ml-4 space-x-1" title="Trophies Won">
-              {trophies.map((t, i) => (
-                <Trophy key={i} className="w-5 h-5 text-yellow-500" />
-              ))}
-            </div>
-          )}
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <button onClick={toggleMute} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors" title={volume > 0 ? "Mute" : "Unmute"}>
-            {volume > 0 ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-          </button>
-
-          <div className="flex items-center space-x-2 bg-zinc-900/60 px-4 py-1.5 rounded-full border border-zinc-800">
-            <span className="text-yellow-500 font-bold">C</span>
-            <span className="font-mono font-medium">{coins.toLocaleString()}</span>
+      <header className={`h-16 md:h-20 border-b border-white/10 bg-zinc-950/70 backdrop-blur-xl flex items-center justify-between px-4 md:px-6 shrink-0 z-50 ${isMatchTab ? 'hidden md:flex' : 'flex'}`}>
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('HOME')}>
+          <img src={teamLogo} alt="Team Logo" className="w-10 h-10 rounded-2xl border border-white/10 object-cover" />
+          <div>
+            <div className="text-lg md:text-xl font-black tracking-tight">{teamName}</div>
+            <div className="text-xs text-zinc-400">OVR {teamOvr} · {squad.formation}</div>
           </div>
-          
-          <button onClick={handleLogout} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors" title="Logout">
-            <LogOut className="w-5 h-5" />
-          </button>
+          {trophies.length > 0 && <div className="hidden md:flex items-center ml-3 gap-1">{trophies.map((_, i) => <Trophy key={i} className="w-4 h-4 text-yellow-400" />)}</div>}
+        </div>
+        <div className="flex items-center gap-2 md:gap-4">
+          <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold">
+            <span className="text-yellow-300">🪙</span>{coins.toLocaleString()}
+          </div>
+          <button onClick={toggleMute} className="icon-btn" title={volume > 0 ? 'Mute' : 'Unmute'}>{volume > 0 ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}</button>
+          <button onClick={() => setActiveTab('HOME')} className="icon-btn"><Home className="w-5 h-5" /></button>
+          <button onClick={handleLogout} className="icon-btn"><LogOut className="w-5 h-5" /></button>
         </div>
       </header>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative">
-        {renderTab()}
-      </main>
+      <main className="flex-1 min-h-0">{renderTab()}</main>
     </div>
   );
 }

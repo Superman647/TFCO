@@ -67,9 +67,9 @@ function LobbyScreen({username,teamName,coins,gems,trophies,onNavigate,onClaim,a
   const menuItems=[
     {id:'MATCH' as Tab,    label:'Trận XH',       badge:'VS NPL', sub:'Virtual'},
     {id:'ONLINE' as Tab,   label:'XH 2vs2',       badge:'ĐỘI',   sub:'Team'},
-    {id:'LEAGUE' as Tab,   label:'Giải Lập XH',   badge:'AUTO'},
-    {id:'WORLDCUP' as Tab, label:'Arena',          badge:'MÙA'},
-    {id:'PRACTICE' as Tab, label:'Môi Đấu Trí',   badge:'MINI'},
+    {id:'LEAGUE' as Tab,   label:'Giải Mùa Giải',  badge:'HOT'},
+    {id:'WORLDCUP' as Tab, label:'Arena Đặc Biệt', badge:'MÙA'},
+    {id:'PRACTICE' as Tab, label:'Giao Hữu',       badge:'FREE'},
     {id:'SQUAD' as Tab,    label:'Squad Battle',  badge:'MỚI'},
   ];
   const botNav=[
